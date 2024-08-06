@@ -16,22 +16,22 @@
     .\Set-LocalAccountNames.ps1 -NewAdminName "Admin123" -NewGuestName "Visitor" -DisableAccounts
 #>
 #region Script Parameters
-[CmdletBinding(SupportsShouldProcess=$true)]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
     [ValidatePattern('^[a-zA-Z0-9\.\-_]+$')]
     [string]$NewAdminName,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
     [ValidatePattern('^[a-zA-Z0-9\.\-_]+$')]
     [string]$NewGuestName,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$DisableAccounts,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$EnableAccounts
 )
 #endregion
@@ -44,10 +44,10 @@ $ErrorActionPreference = 'Stop'
 function Write-Log {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$Message,
         
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory = $false)]
         [ValidateSet("Info", "Warning", "Error")]
         [string]$Level
     )
@@ -58,11 +58,12 @@ function Write-Log {
     if ($Level) {
         $logMessage = "[$timestamp] [$Level] $Message"
         switch ($Level) {
-            "Info"    { Write-Verbose $logMessage }
+            "Info" { Write-Verbose $logMessage }
             "Warning" { Write-Warning $logMessage }
-            "Error"   { Write-Error $logMessage }
+            "Error" { Write-Error $logMessage }
         }
-    } else {
+    }
+    else {
         Write-Host $logMessage
     }
 }
@@ -178,119 +179,137 @@ class UserManager {
 #endregion
 #endregion
 
-#region Main Script Logic
-try {
-    # Initialisation
-    if (-not (Test-AdminRights)) {
-        throw "This script requires administrator rights. Please run as administrator."
-    }
+#region Main Function
+function Main {
+    begin {
+        # Check if no parameters were provided
+        if (-not ($NewAdminName -or $NewGuestName -or $DisableAccounts -or $EnableAccounts)) {
+            Get-Help -Name ".\Set-LocalAccountNames.ps1"
+            return
+        }
 
-    if ($DisableAccounts -and $EnableAccounts) {
-        throw "Both DisableAccounts and EnableAccounts cannot be set simultaneously. Please choose one option."
-    }
+        $ErrorActionPreference = 'Stop'
+        Write-Log -Message "Script started. Checking current account names..." -Level "Info"
 
-    Write-Log -Message "Script started. Checking current account names..." -Level "Info"
+        if (-not (Test-AdminRights)) {
+            throw "This script requires administrator rights. Please run as administrator."
+        }
 
-    $userManager = [UserManager]::new()
-
-    # Main Process
-    #region Rename Operations
-    if ($NewAdminName) {
-        $currentAdminName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }).Name
-        if ($currentAdminName -ne $NewAdminName) {
-            Write-Log -Message "Current Administrator account name: $currentAdminName" -Level "Info"
-            $adminRename = [RenameUserCommand]::new($currentAdminName, $NewAdminName)
-            $userManager.AddCommand($adminRename)
-            Write-Log -Message "Queued rename operation for Administrator account: $currentAdminName -> $NewAdminName" -Level "Info"
+        if ($DisableAccounts -and $EnableAccounts) {
+            throw "Both DisableAccounts and EnableAccounts cannot be set simultaneously. Please choose one option."
         }
     }
 
-    if ($NewGuestName) {
-        $currentGuestName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-501' }).Name
-        if ($currentGuestName -ne $NewGuestName) {
-            Write-Log -Message "Current Guest account name: $currentGuestName" -Level "Info"
-            $guestRename = [RenameUserCommand]::new($currentGuestName, $NewGuestName)
-            $userManager.AddCommand($guestRename)
-            Write-Log -Message "Queued rename operation for Guest account: $currentGuestName -> $NewGuestName" -Level "Info"
-        }
-    }
+    process {
+        try {
+            $userManager = [UserManager]::new()
 
-    if ($userManager.commands.Count -gt 0) {
-        Write-Log -Message "Executing rename operations..." -Level "Info"
-        $userManager.ExecuteCommands()
-    } else {
-        Write-Log -Message "No rename operations needed. Account names are already correct."
-    }
-    #endregion
-
-    #region Account State Operations
-    if ($DisableAccounts -or $EnableAccounts) {
-        $userManager = [UserManager]::new()
-        $operation = if ($DisableAccounts) { "disable" } else { "enable" }
-        Write-Log -Message "${operation}Accounts switch is set. Preparing to $operation accounts..." -Level "Info"
-        
-        if ($NewAdminName) {
-            $adminUser = Get-LocalUser -Name $NewAdminName
-            $adminCurrentState = if ($adminUser.Enabled) { "enabled" } else { "disabled" }
-            if (($DisableAccounts -and $adminUser.Enabled) -or ($EnableAccounts -and -not $adminUser.Enabled)) {
-                $adminCommand = if ($DisableAccounts) { 
-                    [DisableUserCommand]::new($NewAdminName) 
-                } else { 
-                    [EnableUserCommand]::new($NewAdminName) 
+            # Rename Operations
+            if ($NewAdminName) {
+                $currentAdminName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }).Name
+                if ($currentAdminName -ne $NewAdminName) {
+                    Write-Log -Message "Current Administrator account name: $currentAdminName" -Level "Info"
+                    $adminRename = [RenameUserCommand]::new($currentAdminName, $NewAdminName)
+                    $userManager.AddCommand($adminRename)
+                    Write-Log -Message "Queued rename operation for Administrator account: $currentAdminName -> $NewAdminName" -Level "Info"
                 }
-                $userManager.AddCommand($adminCommand)
-                Write-Log -Message "Queued $operation operation for Administrator account: $NewAdminName (currently $adminCurrentState)" -Level "Info"
-            } else {
-                Write-Log -Message "Administrator account $NewAdminName is already $adminCurrentState. Skipping $operation operation."
             }
-        }
-        
-        if ($NewGuestName) {
-            $guestUser = Get-LocalUser -Name $NewGuestName
-            $guestCurrentState = if ($guestUser.Enabled) { "enabled" } else { "disabled" }
-            if (($DisableAccounts -and $guestUser.Enabled) -or ($EnableAccounts -and -not $guestUser.Enabled)) {
-                $guestCommand = if ($DisableAccounts) { 
-                    [DisableUserCommand]::new($NewGuestName) 
-                } else { 
-                    [EnableUserCommand]::new($NewGuestName) 
+
+            if ($NewGuestName) {
+                $currentGuestName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-501' }).Name
+                if ($currentGuestName -ne $NewGuestName) {
+                    Write-Log -Message "Current Guest account name: $currentGuestName" -Level "Info"
+                    $guestRename = [RenameUserCommand]::new($currentGuestName, $NewGuestName)
+                    $userManager.AddCommand($guestRename)
+                    Write-Log -Message "Queued rename operation for Guest account: $currentGuestName -> $NewGuestName" -Level "Info"
                 }
-                $userManager.AddCommand($guestCommand)
-                Write-Log -Message "Queued $operation operation for Guest account: $NewGuestName (currently $guestCurrentState)" -Level "Info"
-            } else {
-                Write-Log -Message "Guest account $NewGuestName is already $guestCurrentState. Skipping $operation operation."
             }
+
+            if ($userManager.commands.Count -gt 0) {
+                Write-Log -Message "Executing rename operations..." -Level "Info"
+                $userManager.ExecuteCommands()
+            }
+            else {
+                Write-Log -Message "No rename operations needed. Account names are already correct."
+            }
+
+            # Account State Operations
+            if ($DisableAccounts -or $EnableAccounts) {
+                $userManager = [UserManager]::new()
+                $operation = if ($DisableAccounts) { "disable" } else { "enable" }
+                Write-Log -Message "${operation}Accounts switch is set. Preparing to $operation accounts..." -Level "Info"
+                
+                if ($NewAdminName) {
+                    $adminUser = Get-LocalUser -Name $NewAdminName
+                    $adminCurrentState = if ($adminUser.Enabled) { "enabled" } else { "disabled" }
+                    if (($DisableAccounts -and $adminUser.Enabled) -or ($EnableAccounts -and -not $adminUser.Enabled)) {
+                        $adminCommand = if ($DisableAccounts) { 
+                            [DisableUserCommand]::new($NewAdminName) 
+                        }
+                        else { 
+                            [EnableUserCommand]::new($NewAdminName) 
+                        }
+                        $userManager.AddCommand($adminCommand)
+                        Write-Log -Message "Queued $operation operation for Administrator account: $NewAdminName (currently $adminCurrentState)" -Level "Info"
+                    }
+                    else {
+                        Write-Log -Message "Administrator account $NewAdminName is already $adminCurrentState. Skipping $operation operation."
+                    }
+                }
+                
+                if ($NewGuestName) {
+                    $guestUser = Get-LocalUser -Name $NewGuestName
+                    $guestCurrentState = if ($guestUser.Enabled) { "enabled" } else { "disabled" }
+                    if (($DisableAccounts -and $guestUser.Enabled) -or ($EnableAccounts -and -not $guestUser.Enabled)) {
+                        $guestCommand = if ($DisableAccounts) { 
+                            [DisableUserCommand]::new($NewGuestName) 
+                        }
+                        else { 
+                            [EnableUserCommand]::new($NewGuestName) 
+                        }
+                        $userManager.AddCommand($guestCommand)
+                        Write-Log -Message "Queued $operation operation for Guest account: $NewGuestName (currently $guestCurrentState)" -Level "Info"
+                    }
+                    else {
+                        Write-Log -Message "Guest account $NewGuestName is already $guestCurrentState. Skipping $operation operation."
+                    }
+                }
+                
+                if ($userManager.commands.Count -gt 0) {
+                    Write-Log -Message "Executing $operation operations..." -Level "Info"
+                    $userManager.ExecuteCommands()
+                }
+                else {
+                    Write-Log -Message "No account state changes needed. Accounts are already in the desired state."
+                }
+            }
+            else {
+                Write-Log -Message "Neither DisableAccounts nor EnableAccounts switch is set. Skipping account enable/disable operations." -Level "Info"
+            }
+
+            # Final Status
+            if ($NewAdminName) {
+                $finalAdminName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }).Name
+                Write-Log -Message "Final Administrator account name: $finalAdminName" -Level "Info"
+            }
+
+            if ($NewGuestName) {
+                $finalGuestName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-501' }).Name
+                Write-Log -Message "Final Guest account name: $finalGuestName" -Level "Info"
+            }
+
+            Write-Log -Message "Script execution completed." -Level "Info"
         }
-        
-        if ($userManager.commands.Count -gt 0) {
-            Write-Log -Message "Executing $operation operations..." -Level "Info"
-            $userManager.ExecuteCommands()
-        } else {
-            Write-Log -Message "No account state changes needed. Accounts are already in the desired state."
+        catch {
+            Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
         }
     }
-    else {
-        Write-Log -Message "Neither DisableAccounts nor EnableAccounts switch is set. Skipping account enable/disable operations." -Level "Info"
-    }
-    #endregion
 
-    # Final Status
-    if ($NewAdminName) {
-        $finalAdminName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }).Name
-        Write-Log -Message "Final Administrator account name: $finalAdminName" -Level "Info"
+    end {
+        Write-Log -Message "Script execution finished." -Level "Info"
     }
-
-    if ($NewGuestName) {
-        $finalGuestName = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-501' }).Name
-        Write-Log -Message "Final Guest account name: $finalGuestName" -Level "Info"
-    }
-
-    Write-Log -Message "Script execution completed." -Level "Info"
-}
-catch {
-    Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
-}
-finally {
-    # Perform any necessary cleanup here
-    Write-Log -Message "Script execution finished." -Level "Info"
 }
 #endregion
+
+# Call the main function
+Main @PSBoundParameters
