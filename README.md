@@ -10,7 +10,7 @@
 - **Enable/Disable Accounts**: Option to enable or disable the Administrator and Guest accounts after renaming.
 - **Logging**: Comprehensive logging of all operations for auditing and troubleshooting.
 - **Error Handling**: Robust error handling and informative error messages.
-- **Command Pattern**: Utilizes the Command design pattern for flexible and extensible account management operations.
+- **Command Pattern**: Utilises the Command design pattern for flexible and extensible account management operations.
 
 ## Usage
 
