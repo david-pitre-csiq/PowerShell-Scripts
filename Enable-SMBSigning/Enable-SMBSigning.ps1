@@ -338,14 +338,15 @@ function Main {
                 Write-Log -Message "Executing SMB Signing operations..." -Level "Info"
                 $smbSigningManager.ExecuteCommands()
             }
-            else {
-                Write-Log -Message "No SMB Signing operations needed."
-            }
 
             Write-Log -Message "Restarting LanmanWorkstation and LanmanServer services to apply changes..."
             Restart-Service -Name "LanmanWorkstation" -Force
             Restart-Service -Name "LanmanServer" -Force
             Write-Log -Message "LanmanWorkstation and LanmanServer services have been restarted."
+
+            else {
+                Write-Log -Message "No SMB Signing operations needed."
+            }
         }
         catch {
             Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
