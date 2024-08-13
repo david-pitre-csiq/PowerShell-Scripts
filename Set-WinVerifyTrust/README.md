@@ -31,7 +31,7 @@ The script supports the following parameters:
 
 ## Security Note
 
-This script is designed to enhance system security by managing the `EnableCertPaddingCheck` registry key. Always use caution when modifying system settings and ensure you have proper authorization before running this script in a production environment.
+This script is designed to enhance system security by managing the `EnableCertPaddingCheck` registry key. Always use caution when modifying system settings and ensure you have proper authorisation before running this script in a production environment.
 
 ## CIS Control
 
