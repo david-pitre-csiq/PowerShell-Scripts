@@ -1,5 +1,5 @@
 # Import the module or script to be tested
-. "$PSScriptRoot\..\Computer\Set-LocalAccountNames.ps1"
+. "$PSScriptRoot\Set-LocalAccountNames.ps1"
 
 Describe "Set-LocalAccountNames" {
     BeforeAll {
