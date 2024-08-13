@@ -1,5 +1,5 @@
 # Import the script to be tested
-. "$PSScriptRoot\..\Computer\Set-SMBv1.ps1"
+. "$PSScriptRoot\Set-SMBv1.ps1"
 
 Describe "Set-SMBv1 Script Tests" {
     BeforeAll {
