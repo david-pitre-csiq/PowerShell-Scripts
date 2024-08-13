@@ -1,70 +1,46 @@
-# Set-LocalAccountNames
+# Windows Configuration Scripts
 
-## Description
+This repository contains PowerShell scripts for configuring various settings on Windows 10 and Windows 11. Each script requires administrative privileges to run and provides functionality to modify system settings such as Autoplay, local account names, and SMB Signing.
 
-`Set-LocalAccountNames.ps1` is a PowerShell script designed to enhance the security of Windows systems by managing local user accounts. It provides functionality to rename the built-in Administrator and Guest accounts, as well as optionally disable or enable these accounts.
+## Scripts
 
-## Key Features
+### 1. Set-Autoplay.ps1
 
-- **Rename Accounts**: Allows renaming of the local Administrator and Guest accounts to custom names.
-- **Enable/Disable Accounts**: Option to enable or disable the Administrator and Guest accounts after renaming.
-- **Logging**: Comprehensive logging of all operations for auditing and troubleshooting.
-- **Error Handling**: Robust error handling and informative error messages.
-- **Command Pattern**: Utilises the Command design pattern for flexible and extensible account management operations.
+**Description:**  
+This script disables, enables, or checks the status of Autoplay and Autorun on Windows 10 and Windows 11 by modifying the registry settings.
 
-## Usage
+**Parameters:**
+- `-Disable`: Disables Autoplay and Autorun.
+- `-Enable`: Enables Autoplay and Autorun.
+- `-Check`: Retrieves the current Autoplay and Autorun status.
 
-The script supports the following parameters:
+**Example Usage:**
 
-- `-NewAdminName`: Specify a new name for the Administrator account.
-- `-NewGuestName`: Specify a new name for the Guest account.
-- `-DisableAccounts`: Switch to disable the accounts after renaming.
-- `-EnableAccounts`: Switch to enable the accounts after renaming.
+.\Set-Autoplay.ps1 -Disable
 
-## Example
-```
+
+### 2. Set-LocalAccountNames.ps1
+
+**Description:**  
+This script renames and optionally disables or enables the local Administrator and Guest accounts.
+
+**Parameters:**
+- `-NewAdminName <string>`: The new name for the Administrator account.
+- `-NewGuestName <string>`: The new name for the Guest account.
+- `-DisableAccounts`: Disables the Administrator and Guest accounts after renaming.
+- `-EnableAccounts`: Enables the Administrator and Guest accounts after renaming.
+
+**Example Usage:**
+
 .\Set-LocalAccountNames.ps1 -NewAdminName "Admin123" -NewGuestName "Visitor" -DisableAccounts
-```
-## Requirements
-
-- Windows PowerShell 5.1 or later
-- Administrative privileges
-
-## Security Note
-
-This script is designed to enhance system security by obscuring default account names and managing their state. Always use caution when modifying system accounts and ensure you have proper authorisation before running this script in a production environment.
-
-## CIS Control
-
-This script helps address CIS Control 5: Account Management. Specifically, it aids in implementing the following sub-controls:
-
-- 5.2: Maintain Inventory of Accounts
-- 5.3: Disable Dormant Accounts
-- 5.4: Restrict Administrator Privileges to Dedicated Administrator Accounts
-
-By renaming and optionally disabling the built-in Administrator and Guest accounts, this script contributes to reducing the attack surface and improving the overall security posture of Windows systems in alignment with CIS best practices.
 
 
+### 3. Enable-SMBSigning.ps1
 
-# Enable-SMBSigning
+**Description:**  
+This script enables or disables SMB Signing on both the client and server sides on Windows 10 and 11.
 
-## Description
-
-`Enable-SMBSigning.ps1` is a PowerShell script designed to manage SMB (Server Message Block) Signing settings on Windows 10 and 11 systems. It provides functionality to enable or disable SMB Signing on both the client and server sides, as well as to check the current SMB Signing status.
-
-## Key Features
-
-- **Enable/Disable SMB Signing**: Allows enabling or disabling SMB Signing on both client and server sides.
-- **Require/Disable Required SMB Signing**: Option to require or disable the requirement for SMB Signing on the server side.
-- **Check Status**: Check the current SMB Signing status without making any changes.
-- **Logging**: Comprehensive logging of all operations for auditing and troubleshooting.
-- **Error Handling**: Robust error handling and informative error messages.
-- **Command Pattern**: Utilizes the Command design pattern for flexible and extensible SMB Signing management operations.
-
-## Usage
-
-The script supports the following parameters:
-
+**Parameters:**
 - `-EnableClientSigning`: Enables SMB Signing on the client side.
 - `-EnableServerSigning`: Enables SMB Signing on the server side.
 - `-RequireServerSigning`: Requires SMB Signing on the server side.
@@ -74,27 +50,34 @@ The script supports the following parameters:
 - `-EnableAllRequiredSigning`: Enables all required SMB Signing on both client and server sides.
 - `-Check`: Checks the current SMB Signing status without making any changes.
 
-## Example
-```
+**Example Usage:**
+
 .\Enable-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
 
-.\Enable-SMBSigning.ps1 -EnableAllRequiredSigning
-```
+## Prerequisites
 
-## Requirements
-
-- Windows PowerShell 5.1 or later
+- PowerShell 5.1 or later
 - Administrative privileges
 
-## Security Note
+## Usage
 
-This script is designed to enhance system security by managing SMB Signing settings. Always use caution when modifying system settings and ensure you have proper authorization before running this script in a production environment.
+1. Open PowerShell with administrative privileges.
+2. Navigate to the directory containing the script.
+3. Execute the script with the desired parameters.
 
-## CIS Control
+## License
 
-This script helps address CIS Control 9: Limitation and Control of Network Ports, Protocols, and Services. Specifically, it aids in implementing the following sub-controls:
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-- 9.2: Ensure Only Necessary Ports, Protocols, and Services Are Running
-- 9.4: Apply Host-Based Firewalls or Port Filtering
+## Contributing
 
-By managing SMB Signing settings, this script contributes to reducing the attack surface and improving the overall security posture of Windows systems in alignment with CIS best practices.
+Contributions are welcome! Please fork the repository and submit a pull request with your changes.
+
+## Disclaimer
+
+These scripts modify system settings and require administrative privileges. Use them at your own risk. Always ensure you have backups and understand the changes being made to your system.
+
+---
+
+**Author:** David Pitre
+**Contact:** https://www.csiq.co.uk
