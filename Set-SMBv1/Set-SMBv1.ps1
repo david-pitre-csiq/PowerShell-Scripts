@@ -145,17 +145,8 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($Enable -or $Disable -or $Check)) {
-            $response = Read-Host "No parameters provided. Do you want to disable SMBv1? (Y/N)"
-            if ($response -eq 'Y' -or $response -eq 'y') {
-                $Disable = $true
-            } else {
-                if (Get-Command Get-Help -ErrorAction SilentlyContinue) {
-                    Get-Help -Name ".\Set-SMBv1.ps1"
-                } else {
-                    Write-Log -Message "Help not available. Please refer to the script documentation." -Level "Warning"
-                }
-                return
-            }
+            Get-Help -Name ".\Set-SMBv1.ps1"
+            return
         }
 
         $ErrorActionPreference = 'Stop'
