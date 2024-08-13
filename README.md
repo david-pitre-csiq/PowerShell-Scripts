@@ -1,6 +1,8 @@
 # Windows Configuration Scripts
 
-This repository contains PowerShell scripts for configuring various settings on Windows 10 and Windows 11. Each script requires administrative privileges to run and provides functionality to modify system settings such as Autoplay, local account names, and SMB Signing.
+This repository contains PowerShell scripts for configuring various settings on Windows 10 and Windows 11. Each script requires administrative privileges to run and provides functionality to modify system settings such as Autoplay, local account names, and SMB Signing etc.
+
+These scripts are used to address commmon Windows vulnerabilities identified by an authenticated vulnerability scanner such as Qualys or Nessus. 
 
 ## Scripts
 
@@ -35,7 +37,7 @@ This script renames and optionally disables or enables the local Administrator a
 .\Set-LocalAccountNames.ps1 -NewAdminName "Admin123" -NewGuestName "Visitor" -DisableAccounts
 
 
-### 3. Enable-SMBSigning.ps1
+### 3. Set-SMBSigning.ps1
 
 **Description:**  
 This script enables or disables SMB Signing on both the client and server sides on Windows 10 and 11.
