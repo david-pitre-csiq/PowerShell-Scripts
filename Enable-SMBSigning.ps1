@@ -14,10 +14,14 @@
     If specified, disables SMB Signing on the client side.
 .PARAMETER DisableServerSigning
     If specified, disables SMB Signing on the server side.
+.PARAMETER DisableRequireServerSigning
+    If specified, disables the requirement for SMB Signing on the server side.
+.PARAMETER EnableAllRequiredSigning
+    If specified, enables all required SMB Signing on both client and server sides.
 .PARAMETER Check
     If specified, checks the current SMB Signing status without making any changes.
 .EXAMPLE
-    .\Enable-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning
+    .\Enable-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
 #>
 #region Script Parameters
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -36,6 +40,12 @@ param(
 
     [Parameter(Mandatory = $false)]
     [switch]$DisableServerSigning,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DisableRequireServerSigning,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$EnableAllRequiredSigning,
 
     [Parameter(Mandatory = $false)]
     [switch]$Check
@@ -181,6 +191,45 @@ class DisableServerSMBSigningCommand : Command {
         Write-Log -Message "SMB Signing has been disabled on the server side."
     }
 }
+
+class DisableRequireServerSMBSigningCommand : Command {
+    [void] Execute() {
+        $serverRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+        $requireServerValueName = "RequireSecuritySignature"
+        $requireServerValue = 0
+
+        if (-not (Test-Path $serverRegPath)) {
+            New-Item -Path $serverRegPath -Force | Out-Null
+        }
+
+        Set-ItemProperty -Path $serverRegPath -Name $requireServerValueName -Value $requireServerValue
+        Write-Log -Message "Requirement for SMB Signing has been disabled on the server side."
+    }
+}
+
+class EnableAllRequiredSMBSigningCommand : Command {
+    [void] Execute() {
+        $clientRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+        $serverRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+        $clientValueName = "EnableSecuritySignature"
+        $serverValueName = "EnableSecuritySignature"
+        $requireServerValueName = "RequireSecuritySignature"
+        $value = 1
+
+        if (-not (Test-Path $clientRegPath)) {
+            New-Item -Path $clientRegPath -Force | Out-Null
+        }
+        if (-not (Test-Path $serverRegPath)) {
+            New-Item -Path $serverRegPath -Force | Out-Null
+        }
+
+        Set-ItemProperty -Path $clientRegPath -Name $clientValueName -Value $value
+        Set-ItemProperty -Path $serverRegPath -Name $serverValueName -Value $value
+        Set-ItemProperty -Path $serverRegPath -Name $requireServerValueName -Value $value
+
+        Write-Log -Message "All required SMB Signing has been enabled on both client and server sides."
+    }
+}
 #endregion
 
 #region Command Invoker
@@ -204,7 +253,7 @@ class SMBSigningManager {
 function Main {
     begin {
         # Check if no parameters were provided
-        if (-not ($EnableClientSigning -or $EnableServerSigning -or $RequireServerSigning -or $DisableClientSigning -or $DisableServerSigning -or $Check)) {
+        if (-not ($EnableClientSigning -or $EnableServerSigning -or $RequireServerSigning -or $DisableClientSigning -or $DisableServerSigning -or $DisableRequireServerSigning -or $EnableAllRequiredSigning -or $Check)) {
             Get-Help -Name ".\Enable-SMBSigning.ps1"
             return
         }
@@ -214,6 +263,14 @@ function Main {
 
         if (-not (Test-AdminRights)) {
             throw "This script requires administrator rights. Please run as administrator."
+        }
+
+        # Check for conflicting parameters
+        if (($EnableClientSigning -and $DisableClientSigning) -or
+            ($EnableServerSigning -and $DisableServerSigning) -or
+            ($RequireServerSigning -and $DisableRequireServerSigning) -or
+            ($EnableAllRequiredSigning -and ($DisableClientSigning -or $DisableServerSigning -or $DisableRequireServerSigning))) {
+            throw "Conflicting parameters detected. Enable and Disable commands cannot be run at the same time."
         }
     }
 
@@ -227,9 +284,9 @@ function Main {
                 $serverSigningStatus = Get-SMBSigningStatus -RegPath $serverRegPath -ValueName "EnableSecuritySignature"
                 $requireServerSigningStatus = Get-SMBSigningStatus -RegPath $serverRegPath -ValueName "RequireSecuritySignature"
 
-                Write-Log -Message "Current SMB Signing status on client: $clientSigningStatus" -Level "Info"
-                Write-Log -Message "Current SMB Signing status on server: $serverSigningStatus" -Level "Info"
-                Write-Log -Message "Current SMB Signing requirement on server: $requireServerSigningStatus" -Level "Info"
+                Write-Log -Message "Current SMB Signing status on client: $clientSigningStatus"
+                Write-Log -Message "Current SMB Signing status on server: $serverSigningStatus"
+                Write-Log -Message "Current SMB Signing requirement on server: $requireServerSigningStatus"
                 return
             }
 
@@ -265,6 +322,18 @@ function Main {
                 Write-Log -Message "Queued operation to require SMB Signing on the server side." -Level "Info"
             }
 
+            if ($DisableRequireServerSigning) {
+                $requireServerCommand = [DisableRequireServerSMBSigningCommand]::new()
+                $smbSigningManager.AddCommand($requireServerCommand)
+                Write-Log -Message "Queued operation to disable the requirement for SMB Signing on the server side." -Level "Info"
+            }
+
+            if ($EnableAllRequiredSigning) {
+                $allRequiredCommand = [EnableAllRequiredSMBSigningCommand]::new()
+                $smbSigningManager.AddCommand($allRequiredCommand)
+                Write-Log -Message "Queued operation to enable all required SMB Signing on both client and server sides." -Level "Info"
+            }
+
             if ($smbSigningManager.commands.Count -gt 0) {
                 Write-Log -Message "Executing SMB Signing operations..." -Level "Info"
                 $smbSigningManager.ExecuteCommands()
@@ -273,10 +342,10 @@ function Main {
                 Write-Log -Message "No SMB Signing operations needed."
             }
 
-            Write-Log -Message "Restarting LanmanWorkstation and LanmanServer services to apply changes..." -Level "Info"
+            Write-Log -Message "Restarting LanmanWorkstation and LanmanServer services to apply changes..."
             Restart-Service -Name "LanmanWorkstation" -Force
             Restart-Service -Name "LanmanServer" -Force
-            Write-Log -Message "LanmanWorkstation and LanmanServer services have been restarted." -Level "Info"
+            Write-Log -Message "LanmanWorkstation and LanmanServer services have been restarted."
         }
         catch {
             Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
