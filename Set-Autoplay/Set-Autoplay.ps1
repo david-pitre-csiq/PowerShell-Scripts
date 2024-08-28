@@ -180,7 +180,7 @@ function Main {
     process {
         try {
             if ($Check) {
-                Write-Log -Message "Check switch is set. Retrieving current Autoplay and Autorun status..." -Level "Info"
+                Write-Log -Message "Check switch is set. Retrieving current Autoplay and Autorun status..."
 
                 $autoRunPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
                 $autoPlayPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
@@ -190,22 +190,22 @@ function Main {
 
                 if ($autoRunStatus -ne $null) {
                     $decodedAutoRunStatus = Decode-AutoRunStatus -value $autoRunStatus
-                    Write-Log -Message "Current AutoRun status (HKLM): $decodedAutoRunStatus" -Level "Info"
+                    Write-Log -Message "Current AutoRun status (HKLM): $decodedAutoRunStatus"
                 } else {
-                    Write-Log -Message "AutoRun status (HKLM) not set." -Level "Info"
+                    Write-Log -Message "AutoRun status (HKLM) not set."
                 }
 
                 if ($autoPlayStatus -ne $null) {
                     $decodedAutoPlayStatus = Decode-AutoRunStatus -value $autoPlayStatus
-                    Write-Log -Message "Current AutoPlay status (HKCU): $decodedAutoPlayStatus" -Level "Info"
+                    Write-Log -Message "Current AutoPlay status (HKCU): $decodedAutoPlayStatus"
                 } else {
-                    Write-Log -Message "AutoPlay status (HKCU) not set." -Level "Info"
+                    Write-Log -Message "AutoPlay status (HKCU) not set."
                 }
                 return
             }
 
             if ($Disable) {
-                Write-Log -Message "Disable switch is set. Preparing to disable Autoplay and Autorun..." -Level "Info"
+                Write-Log -Message "Disable switch is set. Preparing to disable Autoplay and Autorun..."
 
                 # Disable Autoplay and Autorun for all drives
                 $autoRunPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
@@ -218,7 +218,7 @@ function Main {
                 $registryManager.AddCommand($disableAutoPlay)
             }
             elseif ($Enable) {
-                Write-Log -Message "Enable switch is set. Preparing to enable Autoplay and Autorun..." -Level "Info"
+                Write-Log -Message "Enable switch is set. Preparing to enable Autoplay and Autorun..."
 
                 # Enable Autoplay and Autorun for all drives
                 $autoRunPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
