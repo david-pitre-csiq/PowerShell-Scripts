@@ -2,7 +2,7 @@
 
 ## Description
 
-`Enable-SMBSigning.ps1` is a PowerShell script designed to manage SMB (Server Message Block) Signing settings on Windows 10 and 11 systems. It provides functionality to enable or disable SMB Signing on both the client and server sides, as well as to check the current SMB Signing status.
+`Set-SMBSigning.ps1` is a PowerShell script designed to manage SMB (Server Message Block) Signing settings on Windows 10 and 11 systems. It provides functionality to enable or disable SMB Signing on both the client and server sides, as well as to check the current SMB Signing status.
 
 ## Key Features
 
@@ -28,9 +28,9 @@ The script supports the following parameters:
 
 ## Example
 ```
-.\Enable-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
+.\Set-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
 
-.\Enable-SMBSigning.ps1 -EnableAllRequiredSigning
+.\Set-SMBSigning.ps1 -EnableAllRequiredSigning
 ```
 
 ## Requirements
