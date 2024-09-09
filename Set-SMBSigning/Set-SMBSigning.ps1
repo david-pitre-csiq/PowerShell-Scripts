@@ -21,7 +21,7 @@
 .PARAMETER Check
     If specified, checks the current SMB Signing status without making any changes.
 .EXAMPLE
-    .\Enable-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
+    .\Set-SMBSigning.ps1 -DisableClientSigning -DisableServerSigning -RequireServerSigning
 #>
 #region Script Parameters
 [CmdletBinding(SupportsShouldProcess = $true)]
