@@ -21,7 +21,7 @@
 .PARAMETER Check
     If specified, checks the current SMB Signing status without making any changes.
 .EXAMPLE
-    .\Set-SMBSigning.ps1 -DisableClientSigning -DisableServerSigning -RequireServerSigning
+    .\Set-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
 #>
 #region Script Parameters
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -254,7 +254,7 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($EnableClientSigning -or $EnableServerSigning -or $RequireServerSigning -or $DisableClientSigning -or $DisableServerSigning -or $DisableRequireServerSigning -or $EnableAllRequiredSigning -or $Check)) {
-            Get-Help -Name ".\Enable-SMBSigning.ps1"
+            Get-Help -Name ".\Set-SMBSigning.ps1"
             return
         }
 
@@ -339,10 +339,12 @@ function Main {
                 $smbSigningManager.ExecuteCommands()
             }
 
-            Write-Log -Message "Restarting LanmanWorkstation and LanmanServer services to apply changes..."
-            Restart-Service -Name "LanmanWorkstation" -Force
-            Restart-Service -Name "LanmanServer" -Force
-            Write-Log -Message "LanmanWorkstation and LanmanServer services have been restarted."
+            if ($smbSigningManager.commands.Count -gt 0) {
+                Write-Log -Message "Restarting LanmanWorkstation and LanmanServer services to apply changes..."
+                Restart-Service -Name "LanmanWorkstation" -Force
+                Restart-Service -Name "LanmanServer" -Force
+                Write-Log -Message "LanmanWorkstation and LanmanServer services have been restarted."
+            }
 
             else {
                 Write-Log -Message "No SMB Signing operations needed."
