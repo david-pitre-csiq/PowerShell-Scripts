@@ -21,7 +21,7 @@ The script supports the following parameters:
 - `-Disable`: Disables the `EnableCertPaddingCheck` registry key.
 
 ## Example
-.\Set-WinVerifyTrust.ps1 -Disable
+.\Set-WinVerifyTrust.ps1 -Enable
 
 
 ## Requirements
