@@ -225,6 +225,7 @@ class EnableAllRequiredSMBSigningCommand : Command {
 
         Set-ItemProperty -Path $clientRegPath -Name $clientValueName -Value $value
         Set-ItemProperty -Path $serverRegPath -Name $serverValueName -Value $value
+        Set-ItemProperty -Path $clientRegPath -Name $requireServerValueName -Value $value
         Set-ItemProperty -Path $serverRegPath -Name $requireServerValueName -Value $value
 
         Write-Log -Message "All required SMB Signing has been enabled on both client and server sides."
