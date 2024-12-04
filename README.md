@@ -61,11 +61,44 @@ This script enables or disables SMB Signing on both the client and server sides 
 - PowerShell 5.1 or later
 - Administrative privileges
 
-## Usage
+## Usage Manual Execution
 
 1. Open PowerShell with administrative privileges.
 2. Navigate to the directory containing the script.
 3. Execute the script with the desired parameters.
+
+## Automatic deployment through RMM tools
+
+```Powershell
+$scriptUrl = "<RAW GitHubLink>"
+
+# Define the local path to save the downloaded script in the Windows Temp directory
+$tempDirectory = [System.IO.Path]::GetTempPath()
+$localScriptPath = Join-Path -Path $tempDirectory -ChildPath "Set-NullSessions.Tests.ps1"
+
+# Download the script
+Write-Host "Downloading script from $scriptUrl..."
+Invoke-WebRequest -Uri $scriptUrl -OutFile $localScriptPath -UseBasicParsing
+
+# Check if the script was downloaded successfully
+if (Test-Path -Path $localScriptPath) {
+    Write-Host "Script downloaded successfully to $localScriptPath"
+    
+    # Calculate the SHA256 checksum of the downloaded file
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $fileStream = [System.IO.File]::OpenRead($localScriptPath)
+    try {
+        $checksumBytes = $sha256.ComputeHash($fileStream)
+        $checksum = -join ($checksumBytes | ForEach-Object { $_.ToString("x2") })
+        Write-Host "SHA256 Hash of the downloaded file: $checksum"
+    } finally {
+        $fileStream.Close()
+    }
+} else {
+    Write-Host "Failed to download the script. Please check the URL or your network connection."
+}
+
+```
 
 ## License
 
