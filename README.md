@@ -153,11 +153,7 @@ if ($downloadedChecksum -eq $expectedChecksum) {
     
     # Import the script
     Write-Host "Executing the script..."
-    . $localScriptPath
-
-    # Execute the desired command
-    Write-Host "Running the command: Set-NullSessions.ps1 -RestrictAnonymous -RestrictNullSessionAccess"
-    .\<SCRIPT> <PARAMETER>
+    . $localScriptPath <PARAMETER>
 
     # Cleanup: Remove the downloaded script
     Write-Host "Cleaning up..."
