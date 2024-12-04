@@ -178,7 +178,6 @@ function Main {
         }
 
         if (-not ($Check -or $Enable -or $Disable)) {
-            Get-Help -Name ".\Enable-SMBSigning.ps1"
             return
         }
         # Check for conflicting parameters

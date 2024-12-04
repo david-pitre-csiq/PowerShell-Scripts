@@ -254,7 +254,6 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($EnableClientSigning -or $EnableServerSigning -or $RequireServerSigning -or $DisableClientSigning -or $DisableServerSigning -or $DisableRequireServerSigning -or $EnableAllRequiredSigning -or $Check)) {
-            Get-Help -Name ".\Set-SMBSigning.ps1"
             return
         }
 

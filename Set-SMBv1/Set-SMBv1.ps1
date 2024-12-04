@@ -145,7 +145,6 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($Enable -or $Disable -or $Check)) {
-            Get-Help -Name ".\Set-SMBv1.ps1"
             return
         }
 

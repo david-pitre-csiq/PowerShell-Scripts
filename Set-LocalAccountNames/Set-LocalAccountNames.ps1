@@ -184,7 +184,6 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($NewAdminName -or $NewGuestName -or $DisableAccounts -or $EnableAccounts)) {
-            Get-Help -Name ".\Set-LocalAccountNames.ps1"
             return
         }
 

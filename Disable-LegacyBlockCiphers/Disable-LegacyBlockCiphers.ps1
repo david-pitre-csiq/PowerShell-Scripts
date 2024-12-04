@@ -174,7 +174,6 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($Check -or $DisableLegacyBlockCiphers -or $EnableLegacyBlockCiphers)) {
-            Get-Help -Name ".\Disable-LegacyBlockCiphers.ps1"
             return
         }
 

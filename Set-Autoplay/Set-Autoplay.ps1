@@ -158,7 +158,6 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($Disable -or $Enable -or $Check)) {
-            Get-Help -Name ".\Set-Autoplay.ps1"
             return
         }
 

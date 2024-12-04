@@ -186,7 +186,6 @@ function Main {
     begin {
         # Check if no parameters were provided
         if (-not ($RestrictAnonymous -or $RestrictNullSessionAccess -or $EnableNullSessionAccess -or $EnableAnonymous -or $Check)) {
-            Get-Help -Name ".\Set-NullSessions.ps1"
             return
         }
 
