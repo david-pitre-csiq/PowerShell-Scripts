@@ -247,7 +247,10 @@ function Main {
             }
         }
         catch {
-            Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
+            # Enhanced error logging
+            $errorMessage = "An error occurred during script execution: $_"
+            $errorDetails = $_.Exception | Format-List -Force
+            Write-Log -Message "$errorMessage`nDetails: $errorDetails" -Level "Error"
         }
     }
 
