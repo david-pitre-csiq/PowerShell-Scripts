@@ -248,8 +248,7 @@ function Main {
         }
         catch {
             # Enhanced error logging with string conversion
-            $errorMessage = "An error occurred during script execution: $_"
-            Write-Log -Message $errorMessage -Level "Error"
+            Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
         }
     }
 
