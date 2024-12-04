@@ -250,7 +250,7 @@ function Main {
             # Enhanced error logging with string conversion
             $errorMessage = "An error occurred during script execution: $_"
             $errorDetails = $_.Exception | Format-List -Force | Out-String
-            Write-Log -Message "$errorMessage`nDetails: $errorDetails" -Level "Error"
+            Write-Log -Message "$errorMessage Details: $errorDetails" -Level "Error"
         }
     }
 
