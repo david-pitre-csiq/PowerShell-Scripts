@@ -105,10 +105,10 @@ if (Test-Path -Path $localScriptPath) {
 
 ```PowerShell
 # Define the URL of the script to download
-$scriptUrl = "https://raw.githubusercontent.com/david-pitre-csiq/PowerShell-Scripts/refs/heads/main/Set-SMBv1/Set-SMBv1.ps1"
+$scriptUrl = "<RAW GitHubLink>"
 
 # Define the expected SHA256 checksum of the script (get this value from the source)
-$expectedChecksum = "BB83687A3E911C38C02EAA29308E9A325DA4F953D4829E65BB871267A649DED8"
+$expectedChecksum = "<SHA256 CHECKSUM>"
 
 # Define the local path to save the downloaded script in the Windows Temp directory
 $tempDirectory = [System.IO.Path]::GetTempPath()
@@ -157,8 +157,7 @@ if ($downloadedChecksum -eq $expectedChecksum) {
 
     # Execute the desired command
     Write-Host "Running the command: Set-NullSessions.ps1 -RestrictAnonymous -RestrictNullSessionAccess"
-    .\Set-SMBv1.ps1 -Disable
-    .\Set-SMBv1.ps1 -Check
+    .\<SCRIPT> <PARAMETER>
 
     # Cleanup: Remove the downloaded script
     Write-Host "Cleaning up..."
