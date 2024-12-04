@@ -243,7 +243,7 @@ function Main {
                 $nullSessionManager.ExecuteCommands()
             }
             else {
-                Write-Log -Message "No null session restriction operations needed."
+                Write-Log -Message "No null session restriction operations specified."
             }
         }
         catch {
