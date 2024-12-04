@@ -61,11 +61,120 @@ This script enables or disables SMB Signing on both the client and server sides 
 - PowerShell 5.1 or later
 - Administrative privileges
 
-## Usage
+## Usage Manual Execution
 
 1. Open PowerShell with administrative privileges.
 2. Navigate to the directory containing the script.
 3. Execute the script with the desired parameters.
+
+## Automatic deployment through RMM tools
+
+1. Get the SHA256 Hash of the script.
+
+```Powershell
+$scriptUrl = "<RAW GitHubLink>"
+
+# Define the local path to save the downloaded script in the Windows Temp directory
+$tempDirectory = [System.IO.Path]::GetTempPath()
+$localScriptPath = Join-Path -Path $tempDirectory -ChildPath "Set-NullSessions.Tests.ps1"
+
+# Download the script
+Write-Host "Downloading script from $scriptUrl..."
+Invoke-WebRequest -Uri $scriptUrl -OutFile $localScriptPath -UseBasicParsing
+
+# Check if the script was downloaded successfully
+if (Test-Path -Path $localScriptPath) {
+    Write-Host "Script downloaded successfully to $localScriptPath"
+    
+    # Calculate the SHA256 checksum of the downloaded file
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $fileStream = [System.IO.File]::OpenRead($localScriptPath)
+    try {
+        $checksumBytes = $sha256.ComputeHash($fileStream)
+        $checksum = -join ($checksumBytes | ForEach-Object { $_.ToString("x2") })
+        Write-Host "SHA256 Hash of the downloaded file: $checksum"
+    } finally {
+        $fileStream.Close()
+    }
+} else {
+    Write-Host "Failed to download the script. Please check the URL or your network connection."
+}
+```
+
+2. Run the below powershell to download, execute and remove itself once the action is complete. refer to he output from your RMM tool to confirm it is completed.
+
+```PowerShell
+# Define the URL of the script to download
+$scriptUrl = "<RAW GitHubLink>"
+
+# Define the expected SHA256 checksum of the script (get this value from the source)
+$expectedChecksum = "<SHA256 CHECKSUM>"
+
+# Define the local path to save the downloaded script in the Windows Temp directory
+$tempDirectory = [System.IO.Path]::GetTempPath()
+$localScriptPath = Join-Path -Path $tempDirectory -ChildPath "Set-SMBv1.ps1"
+
+# Function to calculate the SHA256 checksum of a file
+function Get-FileChecksum($filePath) {
+    if (-not (Test-Path -Path $filePath)) {
+        return $null
+    }
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $fileStream = [System.IO.File]::OpenRead($filePath)
+    try {
+        $checksumBytes = $sha256.ComputeHash($fileStream)
+        return -join ($checksumBytes | ForEach-Object { $_.ToString("x2") })
+    } finally {
+        $fileStream.Close()
+    }
+}
+
+# Check if the script already exists and verify its checksum
+if (Test-Path -Path $localScriptPath) {
+    Write-Host "Script already exists at $localScriptPath. Verifying its checksum..."
+    $currentChecksum = Get-FileChecksum -filePath $localScriptPath
+    if ($currentChecksum -eq $expectedChecksum) {
+        Write-Host "Checksum verified. The existing file is valid. Proceeding with execution."
+    } else {
+        Write-Host "Checksum mismatch. Replacing the file with the new version..."
+        Remove-Item -Path $localScriptPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Download the script
+Write-Host "Downloading script from $scriptUrl..."
+Invoke-WebRequest -Uri $scriptUrl -OutFile $localScriptPath -UseBasicParsing
+
+# Verify the checksum of the downloaded file
+Write-Host "Verifying checksum of the downloaded script..."
+$downloadedChecksum = Get-FileChecksum -filePath $localScriptPath
+if ($downloadedChecksum -eq $expectedChecksum) {
+    Write-Host "Checksum verification passed. Proceeding with execution..."
+    
+    # Import the script
+    Write-Host "Executing the script..."
+    . $localScriptPath
+
+    # Execute the desired command
+    Write-Host "Running the command: Set-NullSessions.ps1 -RestrictAnonymous -RestrictNullSessionAccess"
+    .\<SCRIPT> <PARAMETER>
+
+    # Cleanup: Remove the downloaded script
+    Write-Host "Cleaning up..."
+    Remove-Item -Path $localScriptPath -Force -ErrorAction SilentlyContinue
+
+    if (-not (Test-Path -Path $localScriptPath)) {
+        Write-Host "Cleanup complete. Script removed successfully."
+    } else {
+        Write-Host "Cleanup failed. Script file still exists: $localScriptPath"
+    }
+} else {
+    Write-Host "Checksum verification failed. The file may be corrupted or tampered with. Exiting..."
+    Remove-Item -Path $localScriptPath -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+
+```
 
 ## License
 
