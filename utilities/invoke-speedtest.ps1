@@ -3,6 +3,9 @@
   Tests approximate download and upload speeds using only native PowerShell commands,
   forcing TLS 1.2 or ignoring certificate validation if needed.
 
+  Oneliner to call and run the speed test. 
+  irm "https://raw.githubusercontent.com/david-pitre-csiq/PowerShell-Scripts/refs/heads/main/utilities/invoke-speedtest.ps1" | iex
+
 #>
 
 # ------------------------------
