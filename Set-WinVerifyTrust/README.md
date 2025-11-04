@@ -1,43 +1,110 @@
+Here’s an updated and more complete **README.md** that reflects your working script, fixes the arrow character issue, clarifies the reboot requirement, and corrects the CIS mapping (the mitigation is related to **code integrity**, not network controls):
+
+---
+
+````markdown
 # Set-WinVerifyTrust
 
 ## Description
 
-`Set-WinVerifyTrust.ps1` is a PowerShell script designed to manage the `EnableCertPaddingCheck` registry key to mitigate CVE-2013-3900. It provides functionality to enable, disable, or check the status of the `EnableCertPaddingCheck` setting in both the 32-bit and 64-bit registry paths.
+`Set-WinVerifyTrust.ps1` is a PowerShell script that configures the **EnableCertPaddingCheck** registry value to mitigate [CVE-2013-3900](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2013-3900).  
+This setting enforces stricter Authenticode signature validation, preventing attackers from exploiting extra padding within signed binaries.
+
+The script provides options to **enable**, **disable**, or **check** the current mitigation state for both 64-bit and 32-bit registry locations.
+
+---
 
 ## Key Features
 
-- **Enable/Disable Cert Padding Check**: Allows enabling or disabling the `EnableCertPaddingCheck` registry key.
-- **Check Status**: Check the current status of the `EnableCertPaddingCheck` registry key without making any changes.
-- **Logging**: Comprehensive logging of all operations for auditing and troubleshooting.
-- **Error Handling**: Robust error handling and informative error messages.
-- **Command Pattern**: Utilises the Command design pattern for flexible and extensible registry management operations.
+- **Enable / Disable Mitigation**  
+  Easily enable or disable the `EnableCertPaddingCheck` registry key in both 32-bit and 64-bit registry paths.
+
+- **Check Status**  
+  View the current status of the mitigation without making changes.
+
+- **Accurate Registry Handling**  
+  Uses .NET registry APIs to ensure consistent behavior regardless of PowerShell host bitness.
+
+- **Logging & Error Handling**  
+  Detailed logging and clear error messages for auditability and troubleshooting.
+
+- **Command Pattern Architecture**  
+  Implements a clean, extensible structure for registry operations.
+
+---
 
 ## Usage
 
-The script supports the following parameters:
+| Parameter | Description |
+|------------|-------------|
+| `-Check`   | Checks the current status of `EnableCertPaddingCheck`. |
+| `-Enable`  | Enables the mitigation by setting `EnableCertPaddingCheck` to `1` (REG_DWORD). |
+| `-Disable` | Disables the mitigation by removing the registry value. |
 
-- `-Check`: Checks the current status of `EnableCertPaddingCheck`.
-- `-Enable`: Enables the `EnableCertPaddingCheck` registry key.
-- `-Disable`: Disables the `EnableCertPaddingCheck` registry key.
+### Examples
 
-## Example
+```powershell
+# Enable the mitigation
 .\Set-WinVerifyTrust.ps1 -Enable
 
+# Check current status
+.\Set-WinVerifyTrust.ps1 -Check
+
+# Disable the mitigation
+.\Set-WinVerifyTrust.ps1 -Disable
+````
+
+---
+
+## Output Example
+
+```
+[2025-11-04 10:41:27] [Info] Registry64 -> HKLM:\Software\Microsoft\Cryptography\Wintrust\Config: Enabled (Value=1; Type=DWord)
+[2025-11-04 10:41:27] [Info] Registry32 -> HKLM:\Software\Wow6432Node\Microsoft\Cryptography\Wintrust\Config: Enabled (Value=1; Type=DWord)
+WARNING: [2025-11-04 10:41:27] [Warning] A system restart is required for changes to take effect.
+```
+
+---
 
 ## Requirements
 
-- Windows PowerShell 5.1 or later
-- Administrative privileges
+* **Windows PowerShell 5.1 or later**
+* **Administrative privileges**
+* **System restart** after enabling or disabling for the mitigation to take effect
+
+---
 
 ## Security Note
 
-This script is designed to enhance system security by managing the `EnableCertPaddingCheck` registry key. Always use caution when modifying system settings and ensure you have proper authorisation before running this script in a production environment.
+This script directly manages Windows Authenticode verification behavior by setting `EnableCertPaddingCheck`.
+Enabling this key strengthens code-signing validation but may cause older or improperly signed binaries to appear **unsigned**.
 
-## CIS Control
+Before widespread deployment:
 
-This script helps address CIS Control 9: Limitation and Control of Network Ports, Protocols, and Services. Specifically, it aids in implementing the following sub-controls:
+* Test in a controlled environment.
+* Ensure your signed applications are compliant with modern Authenticode standards.
 
-- 9.2: Ensure Only Necessary Ports, Protocols, and Services Are Running
-- 9.4: Apply Host-Based Firewalls or Port Filtering
+Microsoft reference:
+[CVE-2013-3900 | WinVerifyTrust Signature Validation Vulnerability](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2013-3900)
 
-By managing the `EnableCertPaddingCheck` registry key, this script contributes to reducing the attack surface and improving the overall security posture of Windows systems in alignment with CIS best practices.
+---
+
+## Related Security Frameworks
+
+While not a direct CIS control, this script supports broader **secure configuration management** practices aligned with:
+
+* **CIS Control 4: Secure Configuration of Enterprise Assets and Software**
+
+  * 4.1: Establish and maintain a secure configuration process
+  * 4.2: Establish and maintain secure configuration settings for endpoints
+
+By ensuring stricter signature verification, this script helps **reduce the risk of executing tampered or untrusted code**, improving system integrity and compliance posture.
+
+---
+
+## License
+
+This script is provided **as-is** without warranty.
+Use at your own risk and verify in a non-production environment before deployment.
+
+```
