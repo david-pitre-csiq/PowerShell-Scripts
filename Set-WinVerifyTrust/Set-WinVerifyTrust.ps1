@@ -1,232 +1,302 @@
 <#
 .SYNOPSIS
-    Ensures EnableCertPaddingCheck is set in the registry to mitigate CVE-2013-3900.
+    Enables, checks, or disables the EnableCertPaddingCheck mitigation for CVE-2013-3900.
+
 .DESCRIPTION
-    This script sets, checks, or disables the EnableCertPaddingCheck registry key in both the 32-bit and 64-bit registry paths.
-    It requires administrative privileges to run.
+    Configures the WinTrust registry value 'EnableCertPaddingCheck' in the correct
+    64-bit and/or 32-bit registry views (as applicable) using .NET Registry APIs,
+    so it works regardless of the bitness of the PowerShell host.
+
+    -Enable  : Creates/sets the value as REG_DWORD = 1 (recommended).
+    -Disable : Deletes the value (per Microsoft guidance).
+    -Check   : Reports the current status in each registry view.
+
+    NOTE: A system restart is required after enabling or disabling for the change to take effect.
+
 .PARAMETER Check
-    If specified, checks the current status of EnableCertPaddingCheck.
+    Checks the current status of EnableCertPaddingCheck.
+
 .PARAMETER Enable
-    If specified, enables EnableCertPaddingCheck.
+    Enables the mitigation by setting REG_DWORD 1.
+
 .PARAMETER Disable
-    If specified, disables EnableCertPaddingCheck.
+    Disables the mitigation by removing the value.
+
 .EXAMPLE
     .\Set-WinVerifyTrust.ps1 -Check
+
 .EXAMPLE
     .\Set-WinVerifyTrust.ps1 -Enable
+
 .EXAMPLE
     .\Set-WinVerifyTrust.ps1 -Disable
+
+.EXAMPLE
+    .\Set-WinVerifyTrust.ps1 -Enable -WhatIf
+    # Shows what would change without making changes.
+
+.NOTES
+    Requires administrative privileges.
+    Tested on Windows 10/11 with PowerShell 5.1+.
 #>
-#region Script Parameters
+
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Parameter(Mandatory = $false)]
     [switch]$Check,
-
-    [Parameter(Mandatory = $false)]
     [switch]$Enable,
-
-    [Parameter(Mandatory = $false)]
     [switch]$Disable
 )
-#endregion
 
-#region Script Setup
+#region Setup & Utilities
 $ErrorActionPreference = 'Stop'
-#endregion
+$script:WintrustSubkeyPath = 'Software\Microsoft\Cryptography\Wintrust\Config'
+$script:RegValueName = 'EnableCertPaddingCheck'
 
-#region Functions
 function Write-Log {
     [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
+    param(
+        [Parameter(Mandatory)]
         [string]$Message,
-        
-        [Parameter(Mandatory = $false)]
-        [ValidateSet("Info", "Warning", "Error")]
-        [string]$Level
+        [ValidateSet('Info','Warning','Error')]
+        [string]$Level = 'Info'
     )
-    
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "[$timestamp] $Message"
-    
-    if ($Level) {
-        $logMessage = "[$timestamp] [$Level] $Message"
-        switch ($Level) {
-            "Info" { Write-Verbose $logMessage }
-            "Warning" { Write-Warning $logMessage }
-            "Error" { Write-Error $logMessage }
-        }
-    }
-    else {
-        Write-Host $logMessage
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $line = "[$ts] [$Level] $Message"
+    switch ($Level) {
+        'Info'    { Write-Host    $line }
+        'Warning' { Write-Warning $line }
+        'Error'   { Write-Error   $line }
     }
 }
 
 function Test-AdminRights {
-    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-    return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-function Get-RegistryValue {
-    param (
-        [string]$Path,
-        [string]$Name
-    )
-
-    if (Test-Path $Path) {
-        $value = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
-        if ($null -ne $value) {
-            return $value.$Name
-        }
+function Get-RegistryViews {
+    if ([Environment]::Is64BitOperatingSystem) {
+        [Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32
+    } else {
+        [Microsoft.Win32.RegistryView]::Registry32
     }
-    return $null
+}
+
+function Get-DisplayPath {
+    param([Microsoft.Win32.RegistryView]$View)
+    if ([Environment]::Is64BitOperatingSystem) {
+        if ($View -eq [Microsoft.Win32.RegistryView]::Registry64) {
+            'HKLM:\Software\Microsoft\Cryptography\Wintrust\Config'
+        } else {
+            'HKLM:\Software\Wow6432Node\Microsoft\Cryptography\Wintrust\Config'
+        }
+    } else {
+        'HKLM:\Software\Microsoft\Cryptography\Wintrust\Config'
+    }
+}
+
+function Open-OrCreate-ConfigKey {
+    param([Microsoft.Win32.RegistryView]$View)
+    $hive   = [Microsoft.Win32.RegistryHive]::LocalMachine
+    $base   = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $View)
+    $key    = $base.OpenSubKey($script:WintrustSubkeyPath, $true)
+    if (-not $key) { $key = $base.CreateSubKey($script:WintrustSubkeyPath) }
+    return $key
 }
 #endregion
 
-#region Classes
-#region Command Interface
-class Command {
-    [void] Execute() { }
-}
-#endregion
+#region Actions
+function Get-EnableCertPaddingCheck {
+    [CmdletBinding()]
+    param()
 
-#region Concrete Commands
-class EnableCertPaddingCheckCommand : Command {
-    [void] Execute() {
-        $regPaths = @(
-            "HKLM:\Software\Microsoft\Cryptography\Wintrust\Config",
-            "HKLM:\Software\Wow6432Node\Microsoft\Cryptography\Wintrust\Config"
-        )
-        $regName = "EnableCertPaddingCheck"
-        $regValue = 1
+    $results = @()
+    foreach ($view in (Get-RegistryViews)) {
+        $display = Get-DisplayPath -View $view
+        $exists  = $false
+        $value   = $null
+        $kind    = $null
+        $enabled = $false
+        $status  = 'Missing'
 
-        foreach ($path in $regPaths) {
-            if (-not (Test-Path $path)) {
-                New-Item -Path $path -Force | Out-Null
+        try {
+            $hive = [Microsoft.Win32.RegistryHive]::LocalMachine
+            $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $view)
+            $key  = $base.OpenSubKey($script:WintrustSubkeyPath, $false)
+            if ($key) {
+                $exists = $true
+                $value  = $key.GetValue($script:RegValueName, $null,
+                                        [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                try { $kind = $key.GetValueKind($script:RegValueName) } catch { $kind = $null }
+                if ($null -ne $value) {
+                    $num = 0
+                    $isNum = [int]::TryParse([string]$value, [ref]$num)
+                    if ($isNum -and $num -ne 0) { $enabled = $true }
+                    elseif (($value -is [int] -or $value -is [long]) -and [int64]$value -ne 0) { $enabled = $true }
+                    $status = if ($enabled) { 'Enabled' } else { 'Disabled' }
+                } else {
+                    $status = 'Missing'
+                }
+                $key.Close()
             }
-            Set-ItemProperty -Path $path -Name $regName -Value $regValue
-            Write-Log -Message "Set $regName to $regValue at $path"
+        } catch {
+            $status = "Error: $($_.Exception.Message)"
+        }
+
+        $results += [pscustomobject]@{
+            View        = if ($view -eq [Microsoft.Win32.RegistryView]::Registry64) {'Registry64'} else {'Registry32'}
+            Path        = $display
+            Exists      = $exists
+            Value       = $value
+            ValueKind   = if ($kind) { $kind.ToString() } else { $null }
+            Status      = $status
         }
     }
+
+    foreach ($r in $results) {
+        Write-Log -Message ("{0} --> {1}: {2}{3}" -f $r.View, $r.Path, $r.Status,
+            ($(if ($r.Value -ne $null) { " (Value=$($r.Value); Type=$($r.ValueKind))" } else { "" }))) -Level 'Info'
+    }
+
+    return $results
+}
+
+function Set-EnableCertPaddingCheck {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
+
+    $changed = $false
+    foreach ($view in (Get-RegistryViews)) {
+        $display = Get-DisplayPath -View $view
+        try {
+            $key = Open-OrCreate-ConfigKey -View $view
+            $cur = $key.GetValue($script:RegValueName, $null)
+            $kind = $null
+            try { $kind = $key.GetValueKind($script:RegValueName) } catch { $kind = $null }
+
+            $needsUpdate = $true
+            if ($null -ne $cur -and $kind -eq [Microsoft.Win32.RegistryValueKind]::DWord) {
+                $needsUpdate = ([int64]$cur -eq 0)
+            }
+
+            if ($PSCmdlet.ShouldProcess($display, "Set ${script:RegValueName}=DWORD:1")) {
+                if ($needsUpdate -or $kind -ne [Microsoft.Win32.RegistryValueKind]::DWord) {
+                    $key.SetValue($script:RegValueName, 1, [Microsoft.Win32.RegistryValueKind]::DWord)
+                    Write-Log -Message "Enabled ${script:RegValueName} at $($display): REG_DWORD = 1." -Level 'Info'
+                    $changed = $true
+                } else {
+                    Write-Log -Message "${script:RegValueName} already enabled at $($display): REG_DWORD = $cur." -Level 'Info'
+                }
+            }
+            $key.Close()
+        } catch {
+            Write-Log -Message "Failed to set ${script:RegValueName} at $($display): $($_.Exception.Message)" -Level 'Error'
+            throw
+        }
+    }
+    return $changed
+}
+
+function Remove-EnableCertPaddingCheck {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
+
+    $changed = $false
+    foreach ($view in (Get-RegistryViews)) {
+        $display = Get-DisplayPath -View $view
+        try {
+            $hive = [Microsoft.Win32.RegistryHive]::LocalMachine
+            $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $view)
+            $key  = $base.OpenSubKey($script:WintrustSubkeyPath, $true)
+            if (-not $key) {
+                Write-Log -Message "No config key present at $($display); nothing to remove." -Level 'Info'
+                continue
+            }
+
+            $cur = $key.GetValue($script:RegValueName, $null)
+            if ($null -ne $cur) {
+                if ($PSCmdlet.ShouldProcess($display, "Remove ${script:RegValueName}")) {
+                    $key.DeleteValue($script:RegValueName, $false)
+                    Write-Log -Message "Removed ${script:RegValueName} at $($display)." -Level 'Info'
+                    $changed = $true
+                }
+            } else {
+                Write-Log -Message "No ${script:RegValueName} value at $($display); nothing to remove." -Level 'Info'
+            }
+            $key.Close()
+        } catch {
+            Write-Log -Message "Failed to remove ${script:RegValueName} at $($display): $($_.Exception.Message)" -Level 'Error'
+            throw
+        }
+    }
+    return $changed
+}
+#endregion
+
+#region Command classes
+class Command { [void] Execute() { } }
+
+class EnableCertPaddingCheckCommand : Command {
+    [bool] $Changed = $false
+    [void] Execute() { $this.Changed = Set-EnableCertPaddingCheck }
 }
 
 class DisableCertPaddingCheckCommand : Command {
-    [void] Execute() {
-        $regPaths = @(
-            "HKLM:\Software\Microsoft\Cryptography\Wintrust\Config",
-            "HKLM:\Software\Wow6432Node\Microsoft\Cryptography\Wintrust\Config"
-        )
-        $regName = "EnableCertPaddingCheck"
-        $regValue = 0
-
-        foreach ($path in $regPaths) {
-            if (-not (Test-Path $path)) {
-                New-Item -Path $path -Force | Out-Null
-            }
-            Set-ItemProperty -Path $path -Name $regName -Value $regValue
-            Write-Log -Message "Set $regName to $regValue at $path"
-        }
-    }
+    [bool] $Changed = $false
+    [void] Execute() { $this.Changed = Remove-EnableCertPaddingCheck }
 }
 
-class CheckCertPaddingCheckCommand : Command {
-    [void] Execute() {
-        $regPaths = @(
-            "HKLM:\Software\Microsoft\Cryptography\Wintrust\Config",
-            "HKLM:\Software\Wow6432Node\Microsoft\Cryptography\Wintrust\Config"
-        )
-        $regName = "EnableCertPaddingCheck"
+class CheckCertPaddingCheckCommand : Command { [void] Execute() { [void](Get-EnableCertPaddingCheck) } }
 
-        foreach ($path in $regPaths) {
-            $value = Get-RegistryValue -Path $path -Name $regName
-            switch ($value) {
-                $null { Write-Log -Message "Current value of $regName at ${path}: Missing" }
-                1 { Write-Log -Message "Current value of $regName at ${path}: Enabled" }
-                0 { Write-Log -Message "Current value of $regName at ${path}: Disabled" }
-                default { Write-Log -Message "Current value of $regName at ${path}: ${value}" }
-            }
-        }
-    }
-}
-#endregion
-
-#region Command Invoker
 class CertPaddingCheckManager {
-    [System.Collections.Generic.List[Command]]$commands = @()
-
-    [void] AddCommand([Command]$command) {
-        $this.commands.Add($command)
-    }
-
-    [void] ExecuteCommands() {
-        foreach ($command in $this.commands) {
-            $command.Execute()
+    [System.Collections.Generic.List[Command]] $Commands = [System.Collections.Generic.List[Command]]::new()
+    [void] AddCommand([Command]$c) { $this.Commands.Add($c) }
+    [bool] ExecuteCommands() {
+        $anyChanged = $false
+        foreach ($c in $this.Commands) {
+            $c.Execute()
+            if ($c -is [EnableCertPaddingCheckCommand] -and $c.Changed) { $anyChanged = $true }
+            if ($c -is [DisableCertPaddingCheckCommand] -and $c.Changed) { $anyChanged = $true }
         }
+        return $anyChanged
     }
 }
 #endregion
-#endregion
 
-#region Main Function
+#region Main
 function Main {
     begin {
-        Write-Log -Message "Script started. Checking for administrative rights..." -Level "Info"
-
+        Write-Log -Message "Starting. Checking for administrative rights..." -Level 'Info'
         if (-not (Test-AdminRights)) {
-            throw "This script requires administrator rights. Please run as administrator."
+            throw "Administrator rights are required. Please run this script in an elevated PowerShell session."
         }
 
         if (-not ($Check -or $Enable -or $Disable)) {
+            Write-Log -Message "No action specified. Use -Check, -Enable, or -Disable." -Level 'Warning'
             return
         }
-        # Check for conflicting parameters
-        if (($Enable -and $Disable) -or (-not ($Check -or $Enable -or $Disable))) {
-            throw "Conflicting or missing parameters detected. Use -Check, -Enable, or -Disable."
+
+        if ($Enable -and $Disable) {
+            throw "Conflicting parameters: -Enable and -Disable cannot be used together."
         }
-
     }
-
     process {
-        try {
-            $certPaddingCheckManager = [CertPaddingCheckManager]::new()
+        $mgr = [CertPaddingCheckManager]::new()
 
-            if ($Check) {
-                $checkCommand = [CheckCertPaddingCheckCommand]::new()
-                $certPaddingCheckManager.AddCommand($checkCommand)
-                Write-Log -Message "Queued operation to check EnableCertPaddingCheck status." -Level "Info"
-            }
+        if ($Check)   { $mgr.AddCommand([CheckCertPaddingCheckCommand]::new());   Write-Log -Message "Queued: Check current status." -Level 'Info' }
+        if ($Enable)  { $mgr.AddCommand([EnableCertPaddingCheckCommand]::new());  Write-Log -Message "Queued: Enable mitigation (set REG_DWORD=1)." -Level 'Info' }
+        if ($Disable) { $mgr.AddCommand([DisableCertPaddingCheckCommand]::new()); Write-Log -Message "Queued: Disable mitigation (remove value)." -Level 'Info' }
 
-            if ($Enable) {
-                $enableCommand = [EnableCertPaddingCheckCommand]::new()
-                $certPaddingCheckManager.AddCommand($enableCommand)
-                Write-Log -Message "Queued operation to enable EnableCertPaddingCheck." -Level "Info"
-            }
-
-            if ($Disable) {
-                $disableCommand = [DisableCertPaddingCheckCommand]::new()
-                $certPaddingCheckManager.AddCommand($disableCommand)
-                Write-Log -Message "Queued operation to disable EnableCertPaddingCheck." -Level "Info"
-            }
-
-            if ($certPaddingCheckManager.commands.Count -gt 0) {
-                Write-Log -Message "Executing EnableCertPaddingCheck operations..." -Level "Info"
-                $certPaddingCheckManager.ExecuteCommands()
-            }
-            else {
-                Write-Log -Message "No EnableCertPaddingCheck operations needed." -Level "Info"
-            }
-        }
-        catch {
-            Write-Log -Message "An error occurred during script execution: $_" -Level "Error"
+        Write-Log -Message "Executing requested operations..." -Level 'Info'
+        $changed = $mgr.ExecuteCommands()
+        if ($changed) {
+            Write-Log -Message "A system restart is required for changes to take effect." -Level 'Warning'
+        } elseif (-not $Check) {
+            Write-Log -Message "No changes were necessary." -Level 'Info'
         }
     }
-
-    end {
-        Write-Log -Message "Script execution finished." -Level "Info"
-    }
+    end { Write-Log -Message "Finished." -Level 'Info' }
 }
-#endregion
 
-# Call the main function
 Main @PSBoundParameters
+#endregion
