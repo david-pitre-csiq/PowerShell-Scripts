@@ -110,4 +110,3 @@ By ensuring stricter signature verification, this script helps **reduce the risk
 This script is provided **as-is** without warranty.
 Use at your own risk and verify in a non-production environment before deployment.
 
-```
