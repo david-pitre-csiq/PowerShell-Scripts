@@ -4,6 +4,30 @@
 
 `Set-LocalAccountNames.ps1` is a PowerShell script designed to enhance the security of Windows systems by managing local user accounts. It provides functionality to rename the built-in Administrator and Guest accounts, as well as optionally disable or enable these accounts.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    Start([Script Starts]) --> CheckParams{Parameters Provided?}
+    CheckParams -->|No| End1([Exit])
+    CheckParams -->|Yes| CheckAdmin{Admin Rights?}
+    CheckAdmin -->|No| Error1[Throw Error: Admin Required]
+    CheckAdmin -->|Yes| ValidateParams{Conflicting Params?}
+    ValidateParams -->|Yes| Error2[Throw Error: Conflicting Parameters]
+    ValidateParams -->|No| CheckRename{New Names Provided?}
+    CheckRename -->|Yes| GetCurrentNames[Get Current Admin/Guest Names via SID]
+    GetCurrentNames --> QueueRename[Queue Rename Commands]
+    QueueRename --> ExecRename[Execute: Rename Accounts]
+    ExecRename --> CheckState{Enable/Disable Requested?}
+    CheckRename -->|No| CheckState
+    CheckState -->|Yes| GetFinalNames[Get Final Account Names]
+    GetFinalNames --> QueueState[Queue Enable/Disable Commands]
+    QueueState --> ExecState[Execute: Enable/Disable Accounts]
+    ExecState --> DisplayFinal[Display Final Account Names]
+    DisplayFinal --> End2([Exit])
+    CheckState -->|No| DisplayFinal
+```
+
 ## Key Features
 
 - **Rename Accounts**: Allows renaming of the local Administrator and Guest accounts to custom names.

@@ -4,6 +4,31 @@
 
 `Set-SMBv1.ps1` is a PowerShell script designed to manage SMBv1 (Server Message Block version 1) settings on Windows 10 and 11 systems. It provides functionality to enable or disable SMBv1 on both the client and server sides, as well as to check the current SMBv1 status.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    Start([Script Starts]) --> CheckParams{Parameters Provided?}
+    CheckParams -->|No| End1([Exit])
+    CheckParams -->|Yes| CheckAdmin{Admin Rights?}
+    CheckAdmin -->|No| Error1[Throw Error: Admin Required]
+    CheckAdmin -->|Yes| ValidateParams{Conflicting Params?}
+    ValidateParams -->|Yes| Error2[Throw Error: Conflicting Parameters]
+    ValidateParams -->|No| ParseParams{Which Parameter?}
+    ParseParams -->|Check| CheckClient[Check Client Status:<br/>SMB1Protocol Feature]
+    CheckClient --> CheckServer[Check Server Status:<br/>EnableSMB1Protocol Config]
+    CheckServer --> DisplayStatus[Display: Client & Server Status]
+    DisplayStatus --> End2([Exit])
+    ParseParams -->|Enable| QueueEnable[Queue Enable Commands]
+    QueueEnable --> ExecEnable[Execute: Enable SMB1Protocol Feature<br/>Set EnableSMB1Protocol = True]
+    ExecEnable --> RestartServices[Restart Services:<br/>LanmanWorkstation<br/>LanmanServer]
+    RestartServices --> End3([Exit])
+    ParseParams -->|Disable| QueueDisable[Queue Disable Commands]
+    QueueDisable --> ExecDisable[Execute: Disable SMB1Protocol Feature<br/>Set EnableSMB1Protocol = False]
+    ExecDisable --> RestartServices2[Restart Services:<br/>LanmanWorkstation<br/>LanmanServer]
+    RestartServices2 --> End4([Exit])
+```
+
 ## Key Features
 
 - **Enable/Disable SMBv1**: Allows enabling or disabling SMBv1 on both client and server sides.

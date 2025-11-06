@@ -7,6 +7,37 @@ This setting enforces NTLMv2-only authentication, preventing attackers from expl
 
 The script provides options to **enable**, **disable**, or **check** the current mitigation state for both 64-bit and 32-bit registry locations.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    Start([Script Starts]) --> CheckAdmin{Admin Rights?}
+    CheckAdmin -->|No| Error1[Throw Error: Admin Required]
+    CheckAdmin -->|Yes| CheckParams{Parameters Provided?}
+    CheckParams -->|No| Warning1[Warning: No Action Specified]
+    CheckParams -->|Yes| ValidateParams{Conflicting Params?}
+    ValidateParams -->|Yes| Error2[Throw Error: Conflicting Parameters]
+    ValidateParams -->|No| ParseParams{Which Parameter?}
+    ParseParams -->|Check| ReadReg[Read Registry: 64-bit & 32-bit Views]
+    ReadReg --> DecodeLevel[Decode LmCompatibilityLevel Value]
+    DecodeLevel --> DisplayStatus[Display Status for Each View]
+    DisplayStatus --> End1([Exit])
+    ParseParams -->|Enable| QueueEnable[Queue Enable Command]
+    QueueEnable --> ExecEnable[Execute: Set LmCompatibilityLevel = 5<br/>in 64-bit & 32-bit Views]
+    ExecEnable --> CheckChanged{Changes Made?}
+    CheckChanged -->|Yes| Success1[Log: Changes Applied<br/>No Restart Required]
+    CheckChanged -->|No| Info1[Log: No Changes Needed]
+    Success1 --> End2([Exit])
+    Info1 --> End2
+    ParseParams -->|Disable| QueueDisable[Queue Disable Command]
+    QueueDisable --> ExecDisable[Execute: Remove LmCompatibilityLevel<br/>from 64-bit & 32-bit Views]
+    ExecDisable --> CheckChanged2{Changes Made?}
+    CheckChanged2 -->|Yes| Success2[Log: Changes Applied<br/>No Restart Required]
+    CheckChanged2 -->|No| Info2[Log: No Changes Needed]
+    Success2 --> End3([Exit])
+    Info2 --> End3
+```
+
 ---
 
 ## Key Features

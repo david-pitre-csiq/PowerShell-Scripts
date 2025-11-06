@@ -4,6 +4,26 @@
 
 `Set-NullSessions.ps1` is a PowerShell script designed to manage null session settings on Windows systems. It provides functionality to enable or restrict null sessions and anonymous access, as well as to check the current status of these settings.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    Start([Script Starts]) --> CheckParams{Parameters Provided?}
+    CheckParams -->|No| End1([Exit])
+    CheckParams -->|Yes| CheckAdmin{Admin Rights?}
+    CheckAdmin -->|No| Error1[Throw Error: Admin Required]
+    CheckAdmin -->|Yes| ParseParams{Which Parameter?}
+    ParseParams -->|Check| ReadReg[Read Registry Values]
+    ReadReg --> DisplayStatus[Display: RestrictAnonymous Status<br/>RestrictNullSessAccess Status]
+    DisplayStatus --> End2([Exit])
+    ParseParams -->|Restrict| QueueRestrict[Queue Restrict Commands]
+    QueueRestrict --> ExecRestrict[Execute: Set RestrictAnonymous = 1<br/>Set RestrictNullSessAccess = 1]
+    ExecRestrict --> End3([Exit])
+    ParseParams -->|Enable| QueueEnable[Queue Enable Commands]
+    QueueEnable --> ExecEnable[Execute: Set RestrictAnonymous = 0<br/>Set RestrictNullSessAccess = 0]
+    ExecEnable --> End4([Exit])
+```
+
 ## Key Features
 
 - **Restrict/Enable Anonymous Access**: Allows restricting or enabling anonymous access.

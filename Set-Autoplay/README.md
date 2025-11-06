@@ -3,6 +3,31 @@
 ## Description
 `Set-Autoplay.ps1` is a PowerShell script designed to manage Autoplay and Autorun settings on Windows 10 and Windows 11 systems. It provides functionality to enable or disable Autoplay and Autorun for all drives, as well as to check the current Autoplay and Autorun status.
 
+## Workflow
+
+```mermaid
+flowchart TD
+    Start([Script Starts]) --> CheckParams{Parameters Provided?}
+    CheckParams -->|No| End1([Exit])
+    CheckParams -->|Yes| CheckAdmin{Admin Rights?}
+    CheckAdmin -->|No| Error1[Throw Error: Admin Required]
+    CheckAdmin -->|Yes| ValidateParams{Conflicting Params?}
+    ValidateParams -->|Yes| Error2[Throw Error: Conflicting Parameters]
+    ValidateParams -->|No| ParseParams{Which Parameter?}
+    ParseParams -->|Check| ReadReg[Read Registry Values]
+    ReadReg --> DecodeStatus[Decode AutoRun Status]
+    DecodeStatus --> DisplayStatus[Display Current Status]
+    DisplayStatus --> End2([Exit])
+    ParseParams -->|Disable| QueueDisable[Queue Disable Commands]
+    QueueDisable --> ExecDisable[Execute: Set HKLM NoDriveTypeAutoRun = 255<br/>Set HKCU NoDriveTypeAutoRun = 255]
+    ExecDisable --> UpdateGP[Update Group Policy]
+    UpdateGP --> End3([Exit])
+    ParseParams -->|Enable| QueueEnable[Queue Enable Commands]
+    QueueEnable --> ExecEnable[Execute: Set HKLM NoDriveTypeAutoRun = 0<br/>Set HKCU NoDriveTypeAutoRun = 0]
+    ExecEnable --> UpdateGP2[Update Group Policy]
+    UpdateGP2 --> End4([Exit])
+```
+
 ## Key Features
 
 - **Enable/Disable Autoplay and Autorun**: Allows enabling or disabling Autoplay and Autorun for all drives.
