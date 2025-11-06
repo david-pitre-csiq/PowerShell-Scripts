@@ -1,8 +1,3 @@
-Here’s an updated and more complete **README.md** that reflects your working script, fixes the arrow character issue, clarifies the reboot requirement, and corrects the CIS mapping (the mitigation is related to **code integrity**, not network controls):
-
----
-
-````markdown
 # Set-WinVerifyTrust
 
 ## Description
