@@ -18,10 +18,46 @@ This script disables, enables, or checks the status of Autoplay and Autorun on W
 
 **Example Usage:**
 
+```powershell
 .\Set-Autoplay.ps1 -Disable
+```
 
 
-### 2. Set-LocalAccountNames.ps1
+### 2. Disable-LegacyBlockCiphers.ps1
+
+**Description:**  
+This script manages legacy block ciphers (such as DES, 3DES, IDEA, and RC2) by modifying registry settings. It can disable or enable legacy block ciphers to address security vulnerabilities.
+
+**Parameters:**
+- `-DisableLegacyBlockCiphers`: Disables legacy block ciphers (3DES).
+- `-EnableLegacyBlockCiphers`: Enables legacy block ciphers (3DES).
+- `-Check`: Checks the current status of legacy block ciphers without making any changes.
+
+**Example Usage:**
+
+```powershell
+.\Disable-LegacyBlockCiphers.ps1 -DisableLegacyBlockCiphers
+```
+
+
+### 3. Set-LmCompatibilityLevel.ps1
+
+**Description:**  
+This script enforces, checks, or reverts LmCompatibilityLevel to block NTLMv1 (CVE-2025-21311 workaround). It sets the registry value to level 5, which sends NTLMv2 only and refuses LM & NTLM. A restart is NOT required; the setting is effective immediately.
+
+**Parameters:**
+- `-Enable`: Sets LmCompatibilityLevel = 5 (NTLMv2 only; refuse LM & NTLM).
+- `-Disable`: Removes LmCompatibilityLevel (Not Defined).
+- `-Check`: Checks the current status of LmCompatibilityLevel.
+
+**Example Usage:**
+
+```powershell
+.\Set-LmCompatibilityLevel.ps1 -Enable
+```
+
+
+### 4. Set-LocalAccountNames.ps1
 
 **Description:**  
 This script renames and optionally disables or enables the local Administrator and Guest accounts.
@@ -34,10 +70,31 @@ This script renames and optionally disables or enables the local Administrator a
 
 **Example Usage:**
 
+```powershell
 .\Set-LocalAccountNames.ps1 -NewAdminName "Admin123" -NewGuestName "Visitor" -DisableAccounts
+```
 
 
-### 3. Set-SMBSigning.ps1
+### 5. Set-NullSessions.ps1
+
+**Description:**  
+This script restricts null sessions by modifying registry settings to prevent unauthorized access. It can restrict anonymous access and null session access.
+
+**Parameters:**
+- `-RestrictAnonymous`: Enables restriction of anonymous access.
+- `-RestrictNullSessionAccess`: Enables restriction of null session access.
+- `-EnableNullSessionAccess`: Enables null session access.
+- `-EnableAnonymous`: Enables anonymous access.
+- `-Check`: Checks the current null session restriction status without making any changes.
+
+**Example Usage:**
+
+```powershell
+.\Set-NullSessions.ps1 -RestrictAnonymous -RestrictNullSessionAccess
+```
+
+
+### 6. Set-SMBSigning.ps1
 
 **Description:**  
 This script enables or disables SMB Signing on both the client and server sides on Windows 10 and 11.
@@ -54,7 +111,43 @@ This script enables or disables SMB Signing on both the client and server sides 
 
 **Example Usage:**
 
-.\Enable-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
+```powershell
+.\Set-SMBSigning.ps1 -EnableClientSigning -EnableServerSigning -RequireServerSigning
+```
+
+
+### 7. Set-SMBv1.ps1
+
+**Description:**  
+This script enables or disables SMBv1 on both the client and server sides on Windows 10 and 11. SMBv1 is a legacy protocol that should typically be disabled for security reasons.
+
+**Parameters:**
+- `-Enable`: Enables SMBv1 on both the client and server sides.
+- `-Disable`: Disables SMBv1 on both the client and server sides.
+- `-Check`: Checks the current SMBv1 status without making any changes.
+
+**Example Usage:**
+
+```powershell
+.\Set-SMBv1.ps1 -Disable
+```
+
+
+### 8. Set-WinVerifyTrust.ps1
+
+**Description:**  
+This script enables, checks, or disables the EnableCertPaddingCheck mitigation for CVE-2013-3900. It configures the WinTrust registry value in both 64-bit and 32-bit registry views. A system restart is required after enabling or disabling for the change to take effect.
+
+**Parameters:**
+- `-Enable`: Enables the mitigation by setting REG_DWORD = 1.
+- `-Disable`: Disables the mitigation by removing the value.
+- `-Check`: Checks the current status of EnableCertPaddingCheck.
+
+**Example Usage:**
+
+```powershell
+.\Set-WinVerifyTrust.ps1 -Enable
+```
 
 ## Prerequisites
 
