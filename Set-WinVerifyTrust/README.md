@@ -72,6 +72,14 @@ WARNING: [2025-11-04 10:41:27] [Warning] A system restart is required for change
 * **Administrative privileges**
 * **System restart** after enabling or disabling for the mitigation to take effect
 
+## Troubleshooting
+
+If you receive an error that an execution policy has prevented the script from running, run the following command:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
 ---
 
 ## Security Note

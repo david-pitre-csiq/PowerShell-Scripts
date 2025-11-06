@@ -29,6 +29,14 @@ The script supports the following parameters:
 - Windows PowerShell 5.1 or later
 - Administrative privileges
 
+## Troubleshooting
+
+If you receive an error that an execution policy has prevented the script from running, run the following command:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
 ## Security Note
 
 This script is designed to enhance system security by managing SMBv1 settings. Always use caution when modifying system settings and ensure you have proper authorization before running this script in a production environment.

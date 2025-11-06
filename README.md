@@ -67,6 +67,12 @@ This script enables or disables SMB Signing on both the client and server sides 
 2. Navigate to the directory containing the script.
 3. Execute the script with the desired parameters.
 
+**Note:** If you receive an error that an execution policy has prevented the script from running, run the following command:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
 ## Automatic deployment through RMM tools
 
 1. Get the SHA256 Hash of the script.
