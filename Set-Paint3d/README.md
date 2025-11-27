@@ -356,7 +356,7 @@ This script manages application installation and removal, which can affect syste
 
 - Always review the script before running in production environments
 - Test in non-production environments first
-- Verify that Paint 3D removal aligns with organizational policies
+- Verify that Paint 3D removal aligns with organisational policies
 - Consider Group Policy management for enterprise deployments
 - Monitor Windows Event Logs for package installation/removal events
 
@@ -368,7 +368,7 @@ This script supports application management practices aligned with:
 
 * **CIS Control 2: Inventory and Control of Software Assets**
   * 2.3: Utilize software inventory tools
-  * 2.4: Track and report unauthorized software
+  * 2.4: Track and report unauthorised software
 
 * **CIS Control 4: Secure Configuration of Enterprise Assets and Software**
   * 4.1: Establish and maintain a secure configuration process

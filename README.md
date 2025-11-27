@@ -78,7 +78,7 @@ This script renames and optionally disables or enables the local Administrator a
 ### 5. Set-NullSessions.ps1
 
 **Description:**  
-This script restricts null sessions by modifying registry settings to prevent unauthorized access. It can restrict anonymous access and null session access.
+This script restricts null sessions by modifying registry settings to prevent unauthorised access. It can restrict anonymous access and null session access.
 
 **Parameters:**
 - `-RestrictAnonymous`: Enables restriction of anonymous access.

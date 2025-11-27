@@ -49,7 +49,7 @@ flowchart TD
   View the current status of the mitigation without making changes, including decoded meaning of each level.
 
 - **Accurate Registry Handling**  
-  Uses .NET registry APIs to ensure consistent behavior regardless of PowerShell host bitness.
+  Uses .NET registry APIs to ensure consistent behaviour regardless of PowerShell host bitness.
 
 - **Logging & Error Handling**  
   Detailed logging and clear error messages for auditability and troubleshooting.
@@ -134,7 +134,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## Security Note
 
-This script directly manages Windows NTLM authentication behavior by setting `LmCompatibilityLevel`.  
+This script directly manages Windows NTLM authentication behaviour by setting `LmCompatibilityLevel`.  
 Enabling this key to level 5 strengthens authentication security by blocking NTLMv1, but may cause compatibility issues with:
 
 * Legacy applications that only support NTLMv1

@@ -52,7 +52,7 @@ flowchart TD
   View the current status of the mitigation without making changes.
 
 - **Accurate Registry Handling**  
-  Uses .NET registry APIs to ensure consistent behavior regardless of PowerShell host bitness.
+  Uses .NET registry APIs to ensure consistent behaviour regardless of PowerShell host bitness.
 
 - **Logging & Error Handling**  
   Detailed logging and clear error messages for auditability and troubleshooting.
@@ -113,7 +113,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## Security Note
 
-This script directly manages Windows Authenticode verification behavior by setting `EnableCertPaddingCheck`.
+This script directly manages Windows Authenticode verification behaviour by setting `EnableCertPaddingCheck`.
 Enabling this key strengthens code-signing validation but may cause older or improperly signed binaries to appear **unsigned**.
 
 Before widespread deployment:
