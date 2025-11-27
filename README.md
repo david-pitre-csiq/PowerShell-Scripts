@@ -1,8 +1,8 @@
 # Windows Configuration Scripts
 
-This repository contains PowerShell scripts for configuring various settings on Windows 10 and Windows 11. Each script requires administrative privileges to run and provides functionality to modify system settings such as Autoplay, local account names, and SMB Signing etc.
+This repository contains PowerShell scripts for configuring various settings on Windows 10 and Windows 11. Each script requires administrative privileges to run and provides functionality to modify system settings such as Autoplay, local account names, SMB Signing, and application management.
 
-These scripts are used to address commmon Windows vulnerabilities identified by an authenticated vulnerability scanner such as Qualys or Nessus. 
+These scripts are used to address common Windows vulnerabilities identified by an authenticated vulnerability scanner such as Qualys or Nessus, as well as manage security-related applications. 
 
 ## Scripts
 
@@ -147,6 +147,29 @@ This script enables, checks, or disables the EnableCertPaddingCheck mitigation f
 
 ```powershell
 .\Set-WinVerifyTrust.ps1 -Enable
+```
+
+
+### 9. Set-Paint3d.ps1
+
+**Description:**  
+This script manages Microsoft Paint 3D (Microsoft.MSPaint) installations on Windows 10/11 systems. It provides functionality to check installation status (including vulnerability detection for outdated versions), update existing installations, and completely uninstall Paint 3D. Note: Microsoft discontinued Paint 3D on November 4, 2024, so new installations are no longer possible.
+
+**Parameters:**
+- `-Check`: Checks Paint and Paint 3D installation status, including vulnerability detection against a safe version baseline.
+- `-Update`: Checks for updates to existing Paint 3D installations (limited functionality due to discontinuation).
+- `-Uninstall`: Uninstalls Paint 3D using winget and Appx package removal. Requires admin rights.
+- `-AllUsers`: Applies operations to all users (requires admin rights for Paint 3D detection).
+- `-SafePaint3DVersion`: Baseline version for vulnerability checking (default: 6.2305.16087.0).
+
+**Example Usage:**
+
+```powershell
+.\Set-Paint3d.ps1 -Check
+```
+
+```powershell
+.\Set-Paint3d.ps1 -Uninstall -AllUsers
 ```
 
 ## Prerequisites
