@@ -1,97 +1,78 @@
 <#
 .SYNOPSIS
-    Manages Microsoft Paint 3D installation (check or uninstall existing installations).
+    Checks and removes Microsoft Paint-family Store apps by exact version.
 
 .DESCRIPTION
-    This script manages Microsoft Paint 3D (Microsoft.MSPaint) through various actions:
-    
-      -Check      -> Display current installation status, including:
-                     * Classic Paint (mspaint.exe) detection and version
-                     * Paint 3D (Microsoft.MSPaint) detection and version
-                     * Vulnerability status (compares against safe baseline version)
-      -Update     -> Check for updates (NOTE: Paint 3D discontinued Nov 4, 2024)
-      -Uninstall  -> Remove via winget, then Appx package as fallback
-    
-    IMPORTANT: Microsoft discontinued Paint 3D on November 4, 2024, and removed it
-    from the Microsoft Store. New installations are no longer possible. This script
-    can still manage existing installations (check status and uninstall).
-    
-    The -Check operation now includes vulnerability detection by comparing installed
-    Paint 3D versions against a safe baseline (default: 6.2305.16087.0).
-    
-    Uses the -AllUsers switch to manage installation for all users where applicable.
+    Supports these Microsoft Store apps:
+      - Microsoft Paint  (Microsoft.Paint)
+      - Paint 3D         (Microsoft.MSPaint)
+      - 3D Viewer        (Microsoft.Microsoft3DViewer)
 
-.PARAMETER Check
-    Checks the current installation status of Paint applications:
-    - Classic Paint (mspaint.exe) - path and version
-    - Paint 3D (Microsoft.MSPaint) - version and vulnerability status
-    Compares Paint 3D version against SafePaint3DVersion to flag vulnerabilities.
+    -Check:
+      * Shows scanner-aligned Win32_InstalledStoreProgram inventory
+      * Shows installed Appx packages
+      * Shows provisioned packages in the online image
 
-.PARAMETER Update
-    Checks for updates to an existing Paint 3D installation.
-    NOTE: Paint 3D was discontinued by Microsoft on November 4, 2024. New installations
-    are not possible. If Paint 3D is already installed, this will attempt to check for
-    updates, though none are expected since the app has been discontinued.
+    -Uninstall:
+      * Prompts for the target app unless -TargetApp is supplied
+      * Prompts for the exact version to remove unless -TargetVersion is supplied
+      * Current-user mode removes only installed MAIN packages for the current user
+      * All-users mode removes BUNDLE packages first (when present), then MAIN as fallback
+      * Optionally removes provisioned packages from the online image
 
-.PARAMETER Uninstall
-    Uninstalls Paint 3D using winget and removes Appx packages.
-
-.PARAMETER AllUsers
-    When set, operations apply to all users where possible (primarily for uninstall).
-
-.PARAMETER SafePaint3DVersion
-    Minimum "safe" version of Paint 3D for vulnerability checking during -Check operations.
-    Default: 6.2305.16087.0
+    Note:
+      * This script targets Microsoft Store / Appx packages.
+      * It does not remove classic mspaint.exe as a Windows component.
 
 .EXAMPLE
-    .\Set-Paint3d.ps1 -Check
-    Checks Paint and Paint 3D installation status, including vulnerability detection.
+    .\Manage-PaintApps.ps1 -Check
 
 .EXAMPLE
-    .\Set-Paint3d.ps1 -Check -SafePaint3DVersion "6.2305.16087.0"
-    Checks installation status with a custom safe version baseline for vulnerability detection.
+    .\Manage-PaintApps.ps1 -Uninstall
 
 .EXAMPLE
-    .\Set-Paint3d.ps1 -Check -AllUsers
-    Checks installation status across all users.
+    .\Manage-PaintApps.ps1 -Uninstall -AllUsers
 
 .EXAMPLE
-    .\Set-Paint3d.ps1 -Update
-    Attempts to update existing Paint 3D installation.
-
-.EXAMPLE
-    .\Set-Paint3d.ps1 -Uninstall
-    Uninstalls Paint 3D for the current user.
-
-.EXAMPLE
-    .\Set-Paint3d.ps1 -Uninstall -AllUsers -WhatIf
-    Shows what would be removed without making changes.
-
-.NOTES
-    IMPORTANT: Paint 3D was discontinued by Microsoft on November 4, 2024.
-    New installations are no longer possible via Microsoft Store or winget.
-    This script can still check and uninstall existing installations.
-    
-    Requires administrative privileges for update/uninstall operations.
-    Tested on Windows 10/11 with PowerShell 5.1+.
-    Uses command pattern for extensibility and maintainability.
+    .\Manage-PaintApps.ps1 -Uninstall -AllUsers -TargetApp Paint -TargetVersion ALL -WhatIf
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [switch]$Check,
-    [switch]$Update,
     [switch]$Uninstall,
     [switch]$AllUsers,
-    
-    # Minimum "safe" version of Paint 3D for vulnerability checking
-    [version]$SafePaint3DVersion = [version]"6.2305.16087.0"
+
+    [ValidateSet('Paint','Paint3D','3DViewer')]
+    [string]$TargetApp,
+
+    [string]$TargetVersion,
+
+    [switch]$SkipProvisionedRemoval
 )
 
-#region Setup & Utilities
 $ErrorActionPreference = 'Stop'
-$script:AppxName = 'Microsoft.MSPaint'
-$script:StoreId = '9NBLGGH5FV99'  # Paint 3D
+
+$script:Targets = [ordered]@{
+    Paint = [pscustomobject]@{
+        Key                    = 'Paint'
+        DisplayName            = 'Microsoft Paint'
+        AppxNames              = @('Microsoft.Paint')
+        StoreProgramIdPrefixes = @('Microsoft.Paint')
+    }
+    Paint3D = [pscustomobject]@{
+        Key                    = 'Paint3D'
+        DisplayName            = 'Paint 3D'
+        AppxNames              = @('Microsoft.MSPaint')
+        StoreProgramIdPrefixes = @('Microsoft.MSPaint')
+    }
+    '3DViewer' = [pscustomobject]@{
+        Key                    = '3DViewer'
+        DisplayName            = '3D Viewer'
+        AppxNames              = @('Microsoft.Microsoft3DViewer')
+        StoreProgramIdPrefixes = @('Microsoft.Microsoft3DViewer')
+    }
+}
 
 function Write-Log {
     [CmdletBinding()]
@@ -100,434 +81,654 @@ function Write-Log {
         [ValidateSet('Info','Warning','Error')]
         [string]$Level = 'Info'
     )
-    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $line = "[$ts] [$Level] $Message"
+
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $line = "[{0}] [{1}] {2}" -f $timestamp, $Level, $Message
+
     switch ($Level) {
-        'Info'    { Write-Host    $line }
+        'Info'    { Write-Host $line }
         'Warning' { Write-Warning $line }
-        'Error'   { Write-Error   $line }
+        'Error'   { Write-Error $line }
     }
 }
 
 function Test-AdminRights {
-    $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    [CmdletBinding()]
+    param()
+
+    $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-function Get-Paint3DPackage {
+function Get-UniqueSortedVersions {
     [CmdletBinding()]
-    param([switch]$AllUsers)
-    
-    if ($AllUsers) {
-        return Get-AppxPackage -Name $script:AppxName -AllUsers -ErrorAction SilentlyContinue
-    } else {
-        return Get-AppxPackage -Name $script:AppxName -ErrorAction SilentlyContinue
+    param([string[]]$Strings)
+
+    $clean = @(
+        $Strings |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { $_.Trim() } |
+            Select-Object -Unique
+    )
+
+    if (-not $clean) {
+        return @()
+    }
+
+    return @(
+        $clean |
+            Sort-Object {
+                try { [version]$_ }
+                catch { [version]'0.0.0.0' }
+            } -Descending
+    )
+}
+
+function Get-StorePrograms {
+    [CmdletBinding()]
+    param()
+
+    try {
+        return @(Get-CimInstance -ClassName Win32_InstalledStoreProgram -ErrorAction Stop)
+    }
+    catch {
+        Write-Log -Message "Win32_InstalledStoreProgram inventory is unavailable: $($_.Exception.Message)" -Level 'Warning'
+        return @()
     }
 }
 
-function Get-WingetCommand {
-    return Get-Command winget -ErrorAction SilentlyContinue
-}
-#endregion
+function Get-AllProvisionedPackages {
+    [CmdletBinding()]
+    param()
 
-#region Actions
-function Get-Paint3DStatus {
+    try {
+        return @(Get-AppxProvisionedPackage -Online -ErrorAction Stop)
+    }
+    catch {
+        Write-Log -Message "Unable to query provisioned Appx packages: $($_.Exception.Message)" -Level 'Warning'
+        return @()
+    }
+}
+
+function Test-StoreProgramMatch {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$StoreProgram,
+
+        [Parameter(Mandatory)]
+        [pscustomobject]$Target
+    )
+
+    $programId = [string]$StoreProgram.ProgramId
+
+    foreach ($prefix in $Target.StoreProgramIdPrefixes) {
+        if ($programId -like "$prefix*") {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-PackageInstalledForAnyUser {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Package
+    )
+
+    $infos = @($Package.PackageUserInformation)
+    if ($infos.Count -eq 0) {
+        return $true
+    }
+
+    foreach ($info in $infos) {
+        if ([string]$info.InstallState -eq 'Installed') {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-InstalledPackages {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Target,
+
+        [switch]$AllUsers,
+
+        [ValidateSet('Main','Bundle')]
+        [string]$PackageType = 'Main'
+    )
+
+    $packages = @()
+
+    foreach ($name in $Target.AppxNames) {
+        $params = @{
+            Name              = $name
+            PackageTypeFilter = @($PackageType)
+            ErrorAction       = 'Stop'
+        }
+
+        if ($AllUsers) {
+            $params['AllUsers'] = $true
+        }
+
+        try {
+            $found = @(Get-AppxPackage @params)
+        }
+        catch {
+            $message = $_.Exception.Message
+
+            if ($AllUsers -and $message -match 'denied|administrator|elevat') {
+                Write-Log -Message "Unable to query $PackageType packages for all users on $($Target.DisplayName): $message" -Level 'Warning'
+            }
+            else {
+                Write-Log -Message "Package query failed for $($Target.DisplayName): $message" -Level 'Warning'
+            }
+
+            $found = @()
+        }
+
+        if ($AllUsers) {
+            $found = @($found | Where-Object { Test-PackageInstalledForAnyUser -Package $_ })
+        }
+
+        $packages += $found
+    }
+
+    return @($packages | Sort-Object PackageFullName -Unique)
+}
+
+function Get-TargetInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Target,
+
+        [switch]$AllUsers,
+
+        [object[]]$StorePrograms,
+
+        [object[]]$AllProvisionedPackages
+    )
+
+    if (-not $PSBoundParameters.ContainsKey('StorePrograms')) {
+        $StorePrograms = Get-StorePrograms
+    }
+
+    if (-not $PSBoundParameters.ContainsKey('AllProvisionedPackages')) {
+        $AllProvisionedPackages = Get-AllProvisionedPackages
+    }
+
+    $scannerMatches = @(
+        $StorePrograms |
+            Where-Object { Test-StoreProgramMatch -StoreProgram $_ -Target $Target }
+    )
+
+    $mainPackages = @(Get-InstalledPackages -Target $Target -AllUsers:$AllUsers -PackageType Main)
+    $bundlePackages = @()
+    if ($AllUsers) {
+        $bundlePackages = @(Get-InstalledPackages -Target $Target -AllUsers:$AllUsers -PackageType Bundle)
+    }
+
+    $provisionedPackages = @(
+        $AllProvisionedPackages |
+            Where-Object { $Target.AppxNames -contains $_.DisplayName }
+    )
+
+    $scannerVersions = @(Get-UniqueSortedVersions -Strings @($scannerMatches | ForEach-Object { [string]$_.Version }))
+    $mainVersions = @(Get-UniqueSortedVersions -Strings @($mainPackages | ForEach-Object { [string]$_.Version }))
+    $bundleVersions = @(Get-UniqueSortedVersions -Strings @($bundlePackages | ForEach-Object { [string]$_.Version }))
+    $provisionedVersions = @(Get-UniqueSortedVersions -Strings @($provisionedPackages | ForEach-Object { [string]$_.Version }))
+
+    $removableVersions = if ($AllUsers) {
+        @(Get-UniqueSortedVersions -Strings (@($bundleVersions) + @($mainVersions) + @($provisionedVersions)))
+    }
+    else {
+        @(Get-UniqueSortedVersions -Strings @($mainVersions))
+    }
+
+    $displayVersions = @(Get-UniqueSortedVersions -Strings (@($scannerVersions) + @($bundleVersions) + @($mainVersions) + @($provisionedVersions)))
+
+    return [pscustomobject]@{
+        Target              = $Target
+        StorePrograms       = $scannerMatches
+        MainPackages        = $mainPackages
+        BundlePackages      = $bundlePackages
+        ProvisionedPackages = $provisionedPackages
+        ScannerVersions     = $scannerVersions
+        MainVersions        = $mainVersions
+        BundleVersions      = $bundleVersions
+        ProvisionedVersions = $provisionedVersions
+        RemovableVersions   = $removableVersions
+        Versions            = $displayVersions
+    }
+}
+
+function Show-Inventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject[]]$Inventories
+    )
+
+    foreach ($inventory in $Inventories) {
+        Write-Host ''
+        Write-Log -Message ("=== {0} ===" -f $inventory.Target.DisplayName)
+
+        if ($inventory.Versions.Count -gt 0) {
+            Write-Log -Message ("Detected versions: {0}" -f ($inventory.Versions -join ', '))
+        }
+        else {
+            Write-Log -Message 'Detected versions: none'
+        }
+
+        Write-Log -Message 'Scanner view (Win32_InstalledStoreProgram):'
+        if ($inventory.StorePrograms.Count -gt 0) {
+            foreach ($item in ($inventory.StorePrograms | Sort-Object {
+                try { [version]$_.Version }
+                catch { [version]'0.0.0.0' }
+            } -Descending)) {
+                Write-Log -Message ("  - Name='{0}'; ProgramId='{1}'; Version='{2}'" -f $item.Name, $item.ProgramId, $item.Version)
+            }
+        }
+        else {
+            Write-Log -Message '  - Not detected'
+        }
+
+        Write-Log -Message 'Installed MAIN packages:'
+        if ($inventory.MainPackages.Count -gt 0) {
+            foreach ($pkg in ($inventory.MainPackages | Sort-Object {
+                try { [version]$_.Version }
+                catch { [version]'0.0.0.0' }
+            } -Descending)) {
+                Write-Log -Message ("  - {0}" -f $pkg.PackageFullName)
+            }
+        }
+        else {
+            Write-Log -Message '  - None'
+        }
+
+        Write-Log -Message 'Installed BUNDLE packages:'
+        if ($inventory.BundlePackages.Count -gt 0) {
+            foreach ($pkg in ($inventory.BundlePackages | Sort-Object {
+                try { [version]$_.Version }
+                catch { [version]'0.0.0.0' }
+            } -Descending)) {
+                Write-Log -Message ("  - {0}" -f $pkg.PackageFullName)
+            }
+        }
+        else {
+            Write-Log -Message '  - None'
+        }
+
+        Write-Log -Message 'Provisioned packages:'
+        if ($inventory.ProvisionedPackages.Count -gt 0) {
+            foreach ($pkg in ($inventory.ProvisionedPackages | Sort-Object {
+                try { [version]$_.Version }
+                catch { [version]'0.0.0.0' }
+            } -Descending)) {
+                Write-Log -Message ("  - {0}" -f $pkg.PackageName)
+            }
+        }
+        else {
+            Write-Log -Message '  - None'
+        }
+
+        if ($inventory.RemovableVersions.Count -gt 0) {
+            Write-Log -Message ("Removable versions in this mode: {0}" -f ($inventory.RemovableVersions -join ', '))
+        }
+        else {
+            Write-Log -Message 'Removable versions in this mode: none'
+        }
+    }
+}
+
+function Get-AllInventories {
+    [CmdletBinding()]
+    param([switch]$AllUsers)
+
+    $storePrograms = Get-StorePrograms
+    $allProvisionedPackages = Get-AllProvisionedPackages
+
+    $inventories = foreach ($target in $script:Targets.Values) {
+        Get-TargetInventory `
+            -Target $target `
+            -AllUsers:$AllUsers `
+            -StorePrograms $storePrograms `
+            -AllProvisionedPackages $allProvisionedPackages
+    }
+
+    return @($inventories)
+}
+
+function Resolve-InventoryForUninstall {
     [CmdletBinding()]
     param(
         [switch]$AllUsers,
-        [version]$SafeVersion = [version]"6.2305.16087.0"
+        [string]$TargetApp
     )
-    
-    Write-Log -Message "=== Detecting Paint Applications ===" -Level 'Info'
-    Write-Log -Message "Safe Paint 3D baseline version: $SafeVersion" -Level 'Info'
-    Write-Log -Message "" -Level 'Info'
-    
-    # ----- Classic Paint (mspaint.exe) -----
-    # Modern Paint is now a Store app (Microsoft.Paint), check multiple sources
-    $classicInstalled = $false
-    $classicVersion = $null
-    $classicPaintPath = $null
-    $paintPackageInfo = $null
-    
-    # Check for Microsoft.Paint Store app (Windows 11+)
-    $paintAppx = Get-AppxPackage -Name "Microsoft.Paint" -ErrorAction SilentlyContinue
-    if ($paintAppx) {
-        $classicInstalled = $true
-        $classicVersion = $paintAppx.Version
-        $paintPackageInfo = "Store App: $($paintAppx.PackageFullName)"
-        $classicPaintPath = "Microsoft Store App"
-    }
-    # Fallback: Check System32 (legacy Windows 10)
-    elseif (Test-Path (Join-Path $env:WINDIR "System32\mspaint.exe")) {
-        $classicInstalled = $true
-        $classicPaintPath = Join-Path $env:WINDIR "System32\mspaint.exe"
-        $classicFile = Get-Item $classicPaintPath
-        $classicVersion = $classicFile.VersionInfo.ProductVersion
-    }
-    # Final fallback: Check if mspaint.exe is in PATH
-    else {
-        $paintCmd = Get-Command mspaint.exe -ErrorAction SilentlyContinue
-        if ($paintCmd) {
-            $classicInstalled = $true
-            $classicPaintPath = $paintCmd.Source
-            if (Test-Path $classicPaintPath) {
-                $classicFile = Get-Item $classicPaintPath
-                $classicVersion = $classicFile.VersionInfo.ProductVersion
+
+    if ($TargetApp) {
+        $inventory = Get-TargetInventory -Target $script:Targets[$TargetApp] -AllUsers:$AllUsers
+
+        if ($inventory.RemovableVersions.Count -eq 0) {
+            if (-not $AllUsers -and $inventory.ProvisionedPackages.Count -gt 0) {
+                Write-Log -Message "Only provisioned packages remain for $($inventory.Target.DisplayName). Re-run with -AllUsers to remove them." -Level 'Warning'
             }
-        }
-    }
-    
-    if ($classicInstalled) {
-        Write-Log -Message "Classic Paint / Paint:" -Level 'Info'
-        Write-Log -Message "  Installed : Yes" -Level 'Info'
-        if ($paintPackageInfo) {
-            Write-Log -Message "  Type      : $paintPackageInfo" -Level 'Info'
-        } else {
-            Write-Log -Message "  Path      : $classicPaintPath" -Level 'Info'
-        }
-        Write-Log -Message "  Version   : $classicVersion" -Level 'Info'
-    } else {
-        Write-Log -Message "Classic Paint / Paint:" -Level 'Info'
-        Write-Log -Message "  Installed : No" -Level 'Info'
-    }
-    
-    Write-Log -Message "" -Level 'Info'
-    
-    # ----- Paint 3D (Microsoft.MSPaint) -----
-    $packages = $null
-    try {
-        $packages = Get-Paint3DPackage -AllUsers:$AllUsers
-    }
-    catch [System.UnauthorizedAccessException] {
-        # Access denied when -AllUsers is used without admin rights
-        # Try without -AllUsers as fallback
-        if ($AllUsers) {
-            $packages = Get-Paint3DPackage
-        }
-    }
-    catch {
-        # Other errors, silently continue
-        $packages = $null
-    }
-    
-    $paint3dInstalled = $false
-    $paint3dVersion = $null
-    $isVulnerable = $false
-    $highestPackage = $null
-    
-    if ($packages) {
-        # Take highest version found across users
-        $highestPackage = $packages | Sort-Object Version -Descending | Select-Object -First 1
-        $paint3dInstalled = $true
-        $paint3dVersion = [version]$highestPackage.Version
-        $isVulnerable = $paint3dVersion -lt $SafeVersion
-        
-        Write-Log -Message "Paint 3D:" -Level 'Info'
-        Write-Log -Message "  Installed          : Yes" -Level 'Info'
-        Write-Log -Message "  Highest Appx Ver.  : $paint3dVersion" -Level 'Info'
-        Write-Log -Message "  PackageFullName    : $($highestPackage.PackageFullName)" -Level 'Info'
-        
-        if ($isVulnerable) {
-            Write-Log -Message "  Vulnerable         : YES (below safe version $SafeVersion)" -Level 'Warning'
-        } else {
-            Write-Log -Message "  Vulnerable         : No" -Level 'Info'
-        }
-        
-        # Show all packages if multiple found
-        if ($packages.Count -gt 1) {
-            Write-Log -Message "  Additional installations:" -Level 'Info'
-            foreach ($pkg in ($packages | Where-Object { $_.PackageFullName -ne $highestPackage.PackageFullName })) {
-                Write-Log -Message "    - $($pkg.PackageFullName) (v$($pkg.Version))" -Level 'Info'
+            else {
+                Write-Log -Message "No removable packages were found for $($inventory.Target.DisplayName)." -Level 'Warning'
             }
+            return $null
         }
-    } else {
-        Write-Log -Message "Paint 3D:" -Level 'Info'
-        Write-Log -Message "  Installed : No" -Level 'Info'
+
+        return $inventory
     }
-    
-    Write-Log -Message "" -Level 'Info'
-    Write-Log -Message "=== Summary ===" -Level 'Info'
-    Write-Log -Message "ClassicPaintInstalled : $classicInstalled" -Level 'Info'
-    Write-Log -Message "ClassicPaintVersion   : $(if ($classicVersion) { $classicVersion } else { 'N/A' })" -Level 'Info'
-    Write-Log -Message "Paint3DInstalled      : $paint3dInstalled" -Level 'Info'
-    Write-Log -Message "Paint3DVersion        : $(if ($paint3dVersion) { $paint3dVersion } else { 'N/A' })" -Level 'Info'
-    Write-Log -Message "Paint3DVulnerable     : $isVulnerable" -Level 'Info'
-    
-    # Return structured object
-    return [pscustomobject]@{
-        ComputerName          = $env:COMPUTERNAME
-        ClassicPaintInstalled = $classicInstalled
-        ClassicPaintVersion   = $classicVersion
-        Paint3DInstalled      = $paint3dInstalled
-        Paint3DVersion        = $paint3dVersion
-        Paint3DVulnerable     = $isVulnerable
-        Packages              = $packages
+
+    $inventories = Get-AllInventories -AllUsers:$AllUsers
+    $removable = @(
+        $inventories |
+            Where-Object { $_.RemovableVersions.Count -gt 0 }
+    )
+
+    if (-not $removable) {
+        Write-Log -Message 'No removable Paint-family Appx packages were found.' -Level 'Warning'
+        return $null
+    }
+
+    if ($removable.Count -eq 1) {
+        return $removable[0]
+    }
+
+    Write-Host ''
+    Write-Host 'Select the Paint-family app to remove:'
+    for ($i = 0; $i -lt $removable.Count; $i++) {
+        $versionsText = $removable[$i].RemovableVersions -join ', '
+        Write-Host ("[{0}] {1}  (versions: {2})" -f ($i + 1), $removable[$i].Target.DisplayName, $versionsText)
+    }
+
+    while ($true) {
+        $answer = Read-Host "Enter a number from 1 to $($removable.Count)"
+        $selectedIndex = 0
+
+        if ([int]::TryParse($answer, [ref]$selectedIndex) -and
+            $selectedIndex -ge 1 -and
+            $selectedIndex -le $removable.Count) {
+            return $removable[$selectedIndex - 1]
+        }
+
+        Write-Host 'Invalid selection. Try again.'
     }
 }
 
-function Show-Paint3DDiscontinuedMessage {
+function Resolve-VersionForUninstall {
     [CmdletBinding()]
-    param()
-    
-    Write-Log -Message "" -Level 'Warning'
-    Write-Log -Message "═══════════════════════════════════════════════════════" -Level 'Warning'
-    Write-Log -Message "  IMPORTANT: Paint 3D Has Been Discontinued" -Level 'Warning'
-    Write-Log -Message "═══════════════════════════════════════════════════════" -Level 'Warning'
-    Write-Log -Message "" -Level 'Warning'
-    Write-Log -Message "Microsoft discontinued Paint 3D on November 4, 2024." -Level 'Warning'
-    Write-Log -Message "It is no longer available in the Microsoft Store." -Level 'Warning'
-    Write-Log -Message "" -Level 'Warning'
-    Write-Log -Message "Alternatives:" -Level 'Info'
-    Write-Log -Message "  • Microsoft Paint (updated with new features)" -Level 'Info'
-    Write-Log -Message "  • Other 3D modeling software (Blender, SketchUp, etc.)" -Level 'Info'
-    Write-Log -Message "" -Level 'Warning'
-    Write-Log -Message "If you already have Paint 3D installed:" -Level 'Info'
-    Write-Log -Message "  • It will continue to work on your system" -Level 'Info'
-    Write-Log -Message "  • You can use -Check to verify installation" -Level 'Info'
-    Write-Log -Message "  • You can use -Uninstall to remove it" -Level 'Info'
-    Write-Log -Message "" -Level 'Warning'
-    Write-Log -Message "═══════════════════════════════════════════════════════" -Level 'Warning'
-    Write-Log -Message "" -Level 'Warning'
-}
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Inventory,
 
-function Update-Paint3D {
-    [CmdletBinding(SupportsShouldProcess=$true)]
-    param()
-    
-    # Check if Paint 3D is currently installed
-    $currentPackages = Get-Paint3DPackage
-    $isInstalled = ($null -ne $currentPackages)
-    
-    if (-not $isInstalled) {
-        # Paint 3D is not installed and cannot be installed (discontinued)
-        Write-Log -Message "Paint 3D is not currently installed." -Level 'Warning'
-        Show-Paint3DDiscontinuedMessage
-        return @{ Success = $false; Changed = $false; Discontinued = $true }
+        [string]$TargetVersion
+    )
+
+    $availableVersions = @($Inventory.RemovableVersions)
+
+    if (-not $availableVersions) {
+        Write-Log -Message "No removable versions were found for $($Inventory.Target.DisplayName)." -Level 'Warning'
+        return $null
     }
-    
-    # Paint 3D is already installed, attempt to update it
-    Write-Log -Message "Paint 3D is currently installed. Checking for updates..." -Level 'Info'
-    
-    $winget = Get-WingetCommand
-    if (-not $winget) {
-        Write-Log -Message "winget is not available. Cannot check for updates." -Level 'Warning'
-        Write-Log -Message "Note: Microsoft discontinued Paint 3D on November 4, 2024." -Level 'Warning'
-        Write-Log -Message "Your existing installation will continue to work, but no updates are available." -Level 'Info'
-        return @{ Success = $false; Changed = $false; Discontinued = $true }
-    }
-    
-    if ($PSCmdlet.ShouldProcess("Paint 3D (Store ID $script:StoreId)", "Check for updates via winget")) {
-        Write-Log -Message "Attempting to upgrade Paint 3D with winget..." -Level 'Info'
-        
-        $upgradeResult = & winget upgrade --id $script:StoreId -e --accept-package-agreements --accept-source-agreements 2>&1
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Log -Message "Paint 3D upgraded successfully." -Level 'Info'
-            return @{ Success = $true; Changed = $true }
-        } else {
-            Write-Log -Message "No updates available or upgrade failed." -Level 'Info'
-            Write-Log -Message "Note: Microsoft discontinued Paint 3D on November 4, 2024." -Level 'Warning'
-            Write-Log -Message "Your existing installation will continue to work." -Level 'Info'
-            return @{ Success = $false; Changed = $false; Discontinued = $true }
+
+    if ($TargetVersion) {
+        $trimmed = $TargetVersion.Trim()
+
+        if ($trimmed -ieq 'ALL') {
+            return 'ALL'
         }
+
+        if ($availableVersions -contains $trimmed) {
+            return $trimmed
+        }
+
+        throw "TargetVersion '$TargetVersion' is not removable for $($Inventory.Target.DisplayName). Removable versions: $($availableVersions -join ', ')"
     }
-    
-    return @{ Success = $false; Changed = $false; WhatIf = $true }
+
+    Write-Host ''
+    Write-Host ("Removable versions for {0}:" -f $Inventory.Target.DisplayName)
+    for ($i = 0; $i -lt $availableVersions.Count; $i++) {
+        Write-Host ("[{0}] {1}" -f ($i + 1), $availableVersions[$i])
+    }
+    Write-Host '[A] ALL versions'
+
+    $promptText = if ($Inventory.Target.Key -eq 'Paint') {
+        'Enter the version of Microsoft Paint you want to remove'
+    }
+    else {
+        "Enter the version of $($Inventory.Target.DisplayName) you want to remove"
+    }
+
+    while ($true) {
+        $answer = (Read-Host "$promptText (number, exact version, or A)").Trim()
+
+        if ($answer -match '^(?i)A(LL)?$') {
+            return 'ALL'
+        }
+
+        $selectedIndex = 0
+        if ([int]::TryParse($answer, [ref]$selectedIndex) -and
+            $selectedIndex -ge 1 -and
+            $selectedIndex -le $availableVersions.Count) {
+            return $availableVersions[$selectedIndex - 1]
+        }
+
+        if ($availableVersions -contains $answer) {
+            return $answer
+        }
+
+        Write-Host 'Invalid selection. Try again.'
+    }
 }
 
-function Uninstall-Paint3D {
-    [CmdletBinding(SupportsShouldProcess=$true)]
-    param([switch]$AllUsers)
-    
-    $changed = $false
-    $winget = Get-WingetCommand
-    
-    # Try winget first
-    if ($winget) {
-        if ($PSCmdlet.ShouldProcess("Paint 3D (Store ID $script:StoreId)", "Uninstall via winget")) {
-            Write-Log -Message "Attempting to uninstall Paint 3D via winget..." -Level 'Info'
-            $uninstallResult = & winget uninstall --id $script:StoreId -e --accept-source-agreements 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log -Message "Paint 3D uninstalled via winget." -Level 'Info'
-                $changed = $true
-            } else {
-                Write-Log -Message "winget uninstall failed or package not found. Trying Appx removal..." -Level 'Warning'
+function Remove-SelectedTargetVersion {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Inventory,
+
+        [Parameter(Mandatory)]
+        [string]$Version,
+
+        [switch]$AllUsers,
+
+        [switch]$SkipProvisionedRemoval
+    )
+
+    $removedAnything = $false
+
+    if ($AllUsers) {
+        $bundleMatches = if ($Version -eq 'ALL') {
+            @($Inventory.BundlePackages)
+        }
+        else {
+            @($Inventory.BundlePackages | Where-Object { [string]$_.Version -eq $Version })
+        }
+
+        if ($bundleMatches.Count -gt 0) {
+            foreach ($pkg in ($bundleMatches | Sort-Object PackageFullName -Descending)) {
+                $targetText = "{0} BUNDLE package {1}" -f $Inventory.Target.DisplayName, $pkg.PackageFullName
+
+                if ($PSCmdlet.ShouldProcess($targetText, 'Remove-AppxPackage -AllUsers')) {
+                    try {
+                        Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
+                        Write-Log -Message "Removed installed BUNDLE package for all users: $($pkg.PackageFullName)"
+                        $removedAnything = $true
+                    }
+                    catch {
+                        Write-Log -Message "Failed to remove installed BUNDLE package $($pkg.PackageFullName): $($_.Exception.Message)" -Level 'Warning'
+                    }
+                }
             }
         }
-    } else {
-        Write-Log -Message "winget not available. Using Appx package removal..." -Level 'Info'
-    }
-    
-    # Fallback: remove Appx packages
-    $packages = Get-Paint3DPackage -AllUsers:$AllUsers
-    if ($packages) {
-        Write-Log -Message "Removing Appx package(s) Microsoft.MSPaint..." -Level 'Info'
-        foreach ($pkg in $packages) {
-            if ($PSCmdlet.ShouldProcess("Appx package $($pkg.PackageFullName)", "Remove-AppxPackage")) {
-                try {
-                    if ($AllUsers) {
-                        # Remove for all users if supported
+        else {
+            $mainMatches = if ($Version -eq 'ALL') {
+                @($Inventory.MainPackages)
+            }
+            else {
+                @($Inventory.MainPackages | Where-Object { [string]$_.Version -eq $Version })
+            }
+
+            foreach ($pkg in ($mainMatches | Sort-Object PackageFullName -Descending)) {
+                $targetText = "{0} MAIN package {1}" -f $Inventory.Target.DisplayName, $pkg.PackageFullName
+
+                if ($PSCmdlet.ShouldProcess($targetText, 'Remove-AppxPackage -AllUsers')) {
+                    try {
                         Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
-                        Write-Log -Message "Removed package for all users: $($pkg.PackageFullName)" -Level 'Info'
-                    } else {
-                        Remove-AppxPackage -Package $pkg.PackageFullName -ErrorAction Stop
-                        Write-Log -Message "Removed package: $($pkg.PackageFullName)" -Level 'Info'
+                        Write-Log -Message "Removed installed MAIN package for all users: $($pkg.PackageFullName)"
+                        $removedAnything = $true
                     }
-                    $changed = $true
+                    catch {
+                        Write-Log -Message "Failed to remove installed MAIN package $($pkg.PackageFullName): $($_.Exception.Message)" -Level 'Warning'
+                    }
+                }
+            }
+        }
+    }
+    else {
+        $mainMatches = if ($Version -eq 'ALL') {
+            @($Inventory.MainPackages)
+        }
+        else {
+            @($Inventory.MainPackages | Where-Object { [string]$_.Version -eq $Version })
+        }
+
+        if ($mainMatches.Count -eq 0) {
+            Write-Log -Message "No installed MAIN packages matched version '$Version' for $($Inventory.Target.DisplayName)." -Level 'Warning'
+        }
+        else {
+            foreach ($pkg in ($mainMatches | Sort-Object PackageFullName -Descending)) {
+                $targetText = "{0} MAIN package {1}" -f $Inventory.Target.DisplayName, $pkg.PackageFullName
+
+                if ($PSCmdlet.ShouldProcess($targetText, 'Remove-AppxPackage')) {
+                    try {
+                        Remove-AppxPackage -Package $pkg.PackageFullName -ErrorAction Stop
+                        Write-Log -Message "Removed installed MAIN package: $($pkg.PackageFullName)"
+                        $removedAnything = $true
+                    }
+                    catch {
+                        Write-Log -Message "Failed to remove installed MAIN package $($pkg.PackageFullName): $($_.Exception.Message)" -Level 'Warning'
+                    }
+                }
+            }
+        }
+    }
+
+    if ($AllUsers -and -not $SkipProvisionedRemoval) {
+        $provisionedMatches = if ($Version -eq 'ALL') {
+            @($Inventory.ProvisionedPackages)
+        }
+        else {
+            @($Inventory.ProvisionedPackages | Where-Object { [string]$_.Version -eq $Version })
+        }
+
+        foreach ($pkg in ($provisionedMatches | Sort-Object PackageName -Descending)) {
+            $targetText = "{0} provisioned package {1}" -f $Inventory.Target.DisplayName, $pkg.PackageName
+
+            if ($PSCmdlet.ShouldProcess($targetText, 'Remove-AppxProvisionedPackage')) {
+                try {
+                    Remove-AppxProvisionedPackage -Online -PackageName $pkg.PackageName -ErrorAction Stop | Out-Null
+                    Write-Log -Message "Removed provisioned package: $($pkg.PackageName)"
+                    $removedAnything = $true
                 }
                 catch {
-                    Write-Log -Message "Failed to remove $($pkg.PackageFullName): $($_.Exception.Message)" -Level 'Warning'
+                    Write-Log -Message "Failed to remove provisioned package $($pkg.PackageName): $($_.Exception.Message)" -Level 'Warning'
                 }
             }
         }
-    } else {
-        Write-Log -Message "No Microsoft.MSPaint Appx packages found to remove." -Level 'Info'
     }
-    
-    return @{ Changed = $changed }
-}
-#endregion
+    elseif (-not $AllUsers -and $Inventory.ProvisionedPackages.Count -gt 0) {
+        Write-Log -Message 'Provisioned package removal was skipped because -AllUsers was not specified.'
+    }
 
-#region Command classes
-class Command { [void] Execute() { } }
-
-class CheckPaint3DCommand : Command {
-    [bool] $AllUsers
-    [version] $SafeVersion
-    [pscustomobject] $Result
-    
-    CheckPaint3DCommand([bool]$allUsers, [version]$safeVersion) {
-        $this.AllUsers = $allUsers
-        $this.SafeVersion = $safeVersion
-    }
-    
-    [void] Execute() {
-        $this.Result = Get-Paint3DStatus -AllUsers:$this.AllUsers -SafeVersion:$this.SafeVersion
-    }
+    return $removedAnything
 }
 
-class UpdatePaint3DCommand : Command {
-    [bool] $Changed = $false
-    [bool] $Success = $false
-    
-    [void] Execute() {
-        $result = Update-Paint3D
-        $this.Success = $result.Success
-        $this.Changed = $result.Changed
-    }
-}
-
-class UninstallPaint3DCommand : Command {
-    [bool] $AllUsers
-    [bool] $Changed = $false
-    
-    UninstallPaint3DCommand([bool]$allUsers) {
-        $this.AllUsers = $allUsers
-    }
-    
-    [void] Execute() {
-        $result = Uninstall-Paint3D -AllUsers:$this.AllUsers
-        $this.Changed = $result.Changed
-    }
-}
-
-class Paint3DManager {
-    [System.Collections.Generic.List[Command]] $Commands = [System.Collections.Generic.List[Command]]::new()
-    
-    [void] AddCommand([Command]$c) {
-        $this.Commands.Add($c)
-    }
-    
-    [hashtable] ExecuteCommands() {
-        $anyChanged = $false
-        foreach ($c in $this.Commands) {
-            $c.Execute()
-            if ($c -is [UpdatePaint3DCommand]) {
-                if ($c.Changed) { $anyChanged = $true }
-            }
-            if ($c -is [UninstallPaint3DCommand]) {
-                if ($c.Changed) { $anyChanged = $true }
-            }
-        }
-        return @{ Changed = $anyChanged }
-    }
-}
-#endregion
-
-#region Main
 function Main {
-    begin {
-        Write-Log -Message "=== Paint 3D Management Script ===" -Level 'Info'
-        Write-Log -Message "Scope: $(if ($AllUsers) { 'All users' } else { 'Current user' })" -Level 'Info'
-        Write-Log -Message "" -Level 'Info'
-        
-        if (-not ($Check -or $Update -or $Uninstall)) {
-            Write-Log -Message "No action specified. Use -Check, -Update, or -Uninstall." -Level 'Warning'
-            return
-        }
-        
-        if (($Update -and $Uninstall)) {
-            throw "Conflicting parameters: -Update and -Uninstall cannot be used together."
-        }
-        
-        # Check admin rights for Update/Uninstall operations
-        if (($Update -or $Uninstall) -and -not (Test-AdminRights)) {
-            throw "Administrator rights are required for Update/Uninstall operations. Please run this script in an elevated PowerShell session."
-        }
-        
-        # Warn about admin rights for Check -AllUsers
-        if ($Check -and $AllUsers -and -not (Test-AdminRights)) {
-            Write-Log -Message "WARNING: -AllUsers with -Check requires administrator rights for complete Paint 3D detection." -Level 'Warning'
-            Write-Log -Message "Paint detection will work, but Paint 3D detection may be limited to current user." -Level 'Warning'
-            Write-Log -Message "" -Level 'Warning'
-        }
+    [CmdletBinding()]
+    param()
+
+    Write-Log -Message '=== Microsoft Paint-family App Manager ==='
+    Write-Log -Message ("Scope: {0}" -f $(if ($AllUsers) { 'All users' } else { 'Current user' }))
+
+    if ($Check -and $Uninstall) {
+        throw 'Use either -Check or -Uninstall, not both.'
     }
-    
-    process {
-        $mgr = [Paint3DManager]::new()
-        
-        if ($Check) {
-            $mgr.AddCommand([CheckPaint3DCommand]::new($AllUsers, $SafePaint3DVersion))
-            Write-Log -Message "Queued: Check current status (Safe version baseline: $SafePaint3DVersion)." -Level 'Info'
-        }
-        
-        if ($Update) {
-            $mgr.AddCommand([UpdatePaint3DCommand]::new())
-            Write-Log -Message "Queued: Update Paint 3D." -Level 'Info'
-        }
-        
-        if ($Uninstall) {
-            $mgr.AddCommand([UninstallPaint3DCommand]::new($AllUsers))
-            Write-Log -Message "Queued: Uninstall Paint 3D." -Level 'Info'
-        }
-        
-        Write-Log -Message "Executing requested operations..." -Level 'Info'
-        Write-Log -Message "" -Level 'Info'
-        
-        $result = $mgr.ExecuteCommands()
-        
-        Write-Log -Message "" -Level 'Info'
-        if ($result.Changed) {
-            Write-Log -Message "Changes applied successfully." -Level 'Info'
-        } elseif (-not $Check) {
-            Write-Log -Message "No changes were necessary or possible." -Level 'Info'
-        }
-        
-        # Show post-action state
-        if (-not $Check) {
-            Write-Log -Message "" -Level 'Info'
-            Write-Log -Message "=== Post-action state ===" -Level 'Info'
-            $status = Get-Paint3DStatus -AllUsers:$AllUsers
-        }
+
+    if (-not ($Check -or $Uninstall)) {
+        throw 'No action specified. Use -Check or -Uninstall.'
     }
-    
-    end {
-        Write-Log -Message "" -Level 'Info'
-        Write-Log -Message "Finished." -Level 'Info'
+
+    if ($Uninstall -and -not (Test-AdminRights)) {
+        throw 'Administrator rights are required for -Uninstall. Run the script in an elevated PowerShell session.'
     }
+
+    if ($Check) {
+        $inventories = Get-AllInventories -AllUsers:$AllUsers
+        Show-Inventory -Inventories $inventories
+        Write-Host ''
+        Write-Log -Message 'Finished.'
+        return
+    }
+
+    $inventory = Resolve-InventoryForUninstall -AllUsers:$AllUsers -TargetApp $TargetApp
+    if (-not $inventory) {
+        Write-Host ''
+        Write-Log -Message 'Finished.'
+        return
+    }
+
+    $versionToRemove = Resolve-VersionForUninstall -Inventory $inventory -TargetVersion $TargetVersion
+    if (-not $versionToRemove) {
+        Write-Host ''
+        Write-Log -Message 'Finished.'
+        return
+    }
+
+    Write-Host ''
+    Write-Log -Message ("Selected app                 : {0}" -f $inventory.Target.DisplayName)
+    Write-Log -Message ("Selected version             : {0}" -f $versionToRemove)
+    Write-Log -Message ("Remove provisioned packages  : {0}" -f $(if ($AllUsers -and -not $SkipProvisionedRemoval) { 'Yes' } else { 'No' }))
+
+    $changed = Remove-SelectedTargetVersion `
+        -Inventory $inventory `
+        -Version $versionToRemove `
+        -AllUsers:$AllUsers `
+        -SkipProvisionedRemoval:$SkipProvisionedRemoval
+
+    Write-Host ''
+    Write-Log -Message '=== Post-removal state ==='
+
+    $postInventory = Get-TargetInventory -Target $inventory.Target -AllUsers:$AllUsers
+    Show-Inventory -Inventories @($postInventory)
+
+    if (-not $AllUsers -and $postInventory.StorePrograms.Count -gt 0 -and $postInventory.MainPackages.Count -eq 0) {
+        Write-Host ''
+        Write-Log -Message "The scanner-aligned WMI view still shows $($postInventory.Target.DisplayName), but no current-user MAIN package remains." -Level 'Warning'
+        Write-Log -Message "That usually means another user profile still has the app installed, or WMI inventory has not refreshed yet." -Level 'Warning'
+        Write-Log -Message "Run again with -Uninstall -AllUsers, or inspect PackageUserInformation with Get-AppxPackage -AllUsers." -Level 'Warning'
+    }
+
+    Write-Host ''
+    if ($changed) {
+        Write-Log -Message 'Removal attempt completed.'
+    }
+    else {
+        Write-Log -Message 'No packages were removed.' -Level 'Warning'
+    }
+
+    Write-Log -Message 'Finished.'
 }
 
-Main @PSBoundParameters
-#endregion
-
+Main
