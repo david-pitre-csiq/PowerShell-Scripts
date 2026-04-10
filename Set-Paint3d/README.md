@@ -1,106 +1,102 @@
 # Set-Paint3d
 
-> **⚠️ IMPORTANT NOTICE**  
-> **Microsoft discontinued Paint 3D on November 4, 2024**, and removed it from the Microsoft Store.  
-> **New installations are no longer possible.**  
-> 
-> This script can still manage existing Paint 3D installations:
-> - ✅ Check installation status
-> - ✅ Uninstall existing installations
-> - ⚠️ Update functionality limited to existing installations (no new installs)
-> 
-> **Alternatives**: Consider using the updated Microsoft Paint (with new features like layers) or other 3D modeling software.
+> **Note on naming**  
+> The project is still called `Set-Paint3d` for compatibility with existing automation and repository history.  
+> The script now manages a broader set of **Microsoft Paint-family Microsoft Store apps**:
+> - **Microsoft Paint** (`Microsoft.Paint`)
+> - **Paint 3D** (`Microsoft.MSPaint`)
+> - **3D Viewer** (`Microsoft.Microsoft3DViewer`)
+
+> **Important notices**
+> - **Paint 3D** was deprecated in August 2024 and removed from the Microsoft Store on **November 4, 2024**. Existing installations continue to work, but new downloads are no longer available.
+> - **3D Viewer** was deprecated in February 2026 and will be removed from the Microsoft Store on **July 1, 2026**. Existing installations continue to work until then and can still be reinstalled from the Store before that date.
 
 ## Description
 
-`Set-Paint3d.ps1` is a PowerShell script that manages Microsoft Paint 3D (Microsoft.MSPaint) installations. This script provides a unified interface to check the installation status, verify existing installations, or completely uninstall Paint 3D from Windows 10/11 systems.
+`Set-Paint3d.ps1` is a PowerShell script for **inventory and removal** of Microsoft Paint-family Store apps on Windows 10/11.
 
-The script leverages Windows Package Manager (winget) for update checks and uninstallation, with fallback to native Appx package management for comprehensive uninstallation support.
+The script now focuses on **discovery and uninstall workflows**, not update/install workflows. It uses:
+
+- **`Win32_InstalledStoreProgram`** for scanner-aligned Store app inventory
+- **`Get-AppxPackage` / `Remove-AppxPackage`** for installed packages
+- **`Get-AppxProvisionedPackage` / `Remove-AppxProvisionedPackage`** for provisioned packages
+
+This makes it useful for remediation workflows where a scanner or internal policy requires **removal of a Store app** rather than in-place updating.
+
+---
 
 ## Workflow
 
 ```mermaid
 flowchart TD
-    Start([Script Starts]) --> CheckParams{Parameters Provided?}
-    CheckParams -->|No| Warning1[Warning: No Action Specified]
-    CheckParams -->|Yes| ValidateParams{Conflicting Params?}
-    ValidateParams -->|Yes| Error1[Throw Error: Conflicting Parameters]
-    ValidateParams -->|No| CheckAdminNeeded{Update or Uninstall?}
-    CheckAdminNeeded -->|Yes| CheckAdmin{Admin Rights?}
-    CheckAdmin -->|No| Error2[Throw Error: Admin Required]
-    CheckAdmin -->|Yes| ParseParams{Which Parameter?}
-    CheckAdminNeeded -->|No Check Only| ParseParams
-    ParseParams -->|Check| GetPackages[Get Paint 3D Appx Packages]
-    GetPackages --> DisplayStatus[Display Package Information<br/>Version, FullName, Users]
-    DisplayStatus --> End1([Exit])
-    ParseParams -->|Update| QueueUpdate[Queue Update Command]
-    QueueUpdate --> CheckWinget{winget Available?}
-    CheckWinget -->|No| WarnNoWinget[Warn: Manual Update Needed]
-    WarnNoWinget --> End2([Exit])
-    CheckWinget -->|Yes| TryUpgrade[Try: winget upgrade]
-    TryUpgrade --> UpgradeSuccess{Success?}
-    UpgradeSuccess -->|Yes| Success1[Log: Upgraded Successfully]
-    Success1 --> ShowPostState1[Show Post-action State]
-    ShowPostState1 --> End3([Exit])
-    UpgradeSuccess -->|No| TryInstall[Try: winget install]
-    TryInstall --> InstallSuccess{Success?}
-    InstallSuccess -->|Yes| Success2[Log: Installed Successfully]
-    Success2 --> ShowPostState2[Show Post-action State]
-    ShowPostState2 --> End4([Exit])
-    InstallSuccess -->|No| Warn1[Warn: Install Failed]
-    Warn1 --> End5([Exit])
-    ParseParams -->|Uninstall| QueueUninstall[Queue Uninstall Command]
-    QueueUninstall --> TryWingetUninstall{winget Available?}
-    TryWingetUninstall -->|Yes| WingetUninstall[winget uninstall]
-    TryWingetUninstall -->|No| AppxUninstall[Skip to Appx Removal]
-    WingetUninstall --> CheckRemaining[Check for Remaining Packages]
-    AppxUninstall --> GetAppxPackages[Get Appx Packages]
-    CheckRemaining --> GetAppxPackages
-    GetAppxPackages --> HasPackages{Packages Found?}
-    HasPackages -->|No| NoPackages[Log: No Packages to Remove]
-    NoPackages --> ShowPostState3[Show Post-action State]
-    ShowPostState3 --> End6([Exit])
-    HasPackages -->|Yes| CheckAllUsers{AllUsers Flag?}
-    CheckAllUsers -->|Yes| RemoveAllUsers[Remove-AppxPackage -AllUsers]
-    CheckAllUsers -->|No| RemoveCurrentUser[Remove-AppxPackage Current User]
-    RemoveAllUsers --> Success3[Log: Removed Successfully]
-    RemoveCurrentUser --> Success3
-    Success3 --> ShowPostState4[Show Post-action State]
-    ShowPostState4 --> End7([Exit])
+    Start([Script Starts]) --> Validate{Action specified?}
+    Validate -->|No| Error1[Throw error: Use -Check or -Uninstall]
+    Validate -->|Yes| Conflict{Both -Check and -Uninstall?}
+    Conflict -->|Yes| Error2[Throw error]
+    Conflict -->|No| Action{Selected action}
+
+    Action -->|Check| CheckScope[Determine scope: current user or all users]
+    CheckScope --> CollectWMI[Query Win32_InstalledStoreProgram]
+    CollectWMI --> CollectAppx[Query Appx packages]
+    CollectAppx --> CollectProvisioned[Query provisioned packages]
+    CollectProvisioned --> ShowInventory[Display inventory for Paint, Paint 3D, and 3D Viewer]
+    ShowInventory --> End1([Exit])
+
+    Action -->|Uninstall| Admin{Elevated PowerShell?}
+    Admin -->|No| Error3[Throw error: admin required]
+    Admin -->|Yes| ResolveApp{Target app supplied?}
+    ResolveApp -->|No| PromptApp[Prompt user to choose app]
+    ResolveApp -->|Yes| ResolveVersions
+    PromptApp --> ResolveVersions[Build removable version list]
+    ResolveVersions --> PromptVersion{Target version supplied?}
+    PromptVersion -->|No| AskVersion[Prompt user for exact version or ALL]
+    PromptVersion -->|Yes| RemoveMode
+    AskVersion --> RemoveMode{AllUsers?}
+
+    RemoveMode -->|No| RemoveMain[Remove MAIN package(s) for current user]
+    RemoveMode -->|Yes| RemoveBundle[Remove BUNDLE package(s) for all users first]
+    RemoveBundle --> RemoveMainFallback[If no bundle, remove MAIN package(s) for all users]
+    RemoveMain --> ProvisionedCheck
+    RemoveMainFallback --> ProvisionedCheck{Skip provisioned removal?}
+    ProvisionedCheck -->|No| RemoveProvisioned[Remove matching provisioned package(s)]
+    ProvisionedCheck -->|Yes| PostCheck[Run post-removal inventory]
+    RemoveProvisioned --> PostCheck
+    PostCheck --> ShowPost[Display post-removal state]
+    ShowPost --> End2([Exit])
 ```
 
 ---
 
 ## Key Features
 
-- **Enhanced Status Checking**  
-  View comprehensive Paint application status including:
-  - **Paint / Classic Paint** - Detects both modern Store app (Microsoft.Paint) and legacy System32 version
-  - **Paint 3D** (Microsoft.MSPaint) - package version and installation scope
-  - **Vulnerability Detection** - compares Paint 3D version against safe baseline (default: 6.2305.16087.0)
-  - Structured output with computer name, version info, and vulnerability status
-  - Multiple detection methods: Store app → System32 → PATH lookup
+- **Multi-app support**
+  - Microsoft Paint (`Microsoft.Paint`)
+  - Paint 3D (`Microsoft.MSPaint`)
+  - 3D Viewer (`Microsoft.Microsoft3DViewer`)
 
-- **Update Management** ⚠️  
-  Check for updates to existing Paint 3D installations. Note: Paint 3D was discontinued on November 4, 2024, so new installations are not possible and updates are unlikely.
+- **Scanner-aligned inventory**
+  - Uses `Win32_InstalledStoreProgram` so the check output is closer to what authenticated vulnerability scanners often see.
 
-- **Complete Uninstallation**  
-  Remove Paint 3D using winget first, then fall back to Appx package removal for thorough cleanup.
+- **Interactive uninstall selection**
+  - Prompts for the target app when `-TargetApp` is not supplied
+  - Prompts for the exact installed version to remove when `-TargetVersion` is not supplied
+  - Supports `ALL` to remove every removable version of the selected app
 
-- **Discontinuation Awareness**  
-  Provides clear messaging about Paint 3D's discontinuation and suggests alternatives when installation is attempted.
+- **Current-user and all-user cleanup**
+  - Current-user mode removes installed **MAIN** packages for the current user
+  - `-AllUsers` mode removes installed packages for all users and can also remove matching **provisioned** packages from the online Windows image
 
-- **All Users Support**  
-  Manage installations across all user profiles with the `-AllUsers` switch.
+- **Bundle-aware removal**
+  - In `-AllUsers` mode, the script attempts to remove **BUNDLE** packages first, then falls back to **MAIN** packages when necessary
 
-- **Command Pattern Architecture**  
-  Implements a clean, extensible command pattern for maintainability and testing.
+- **Provisioned package cleanup**
+  - Removes provisioned packages during `-Uninstall -AllUsers` unless `-SkipProvisionedRemoval` is used
 
-- **Comprehensive Logging**  
-  Detailed logging with timestamps for auditing and troubleshooting.
+- **Detailed logging**
+  - Timestamped log output for inventory, prompts, removal actions, and post-removal verification
 
-- **WhatIf Support**  
-  Preview changes before applying them using PowerShell's built-in `-WhatIf` parameter.
+- **WhatIf support**
+  - Supports PowerShell `-WhatIf` for safe preview of uninstall actions
 
 ---
 
@@ -108,286 +104,324 @@ flowchart TD
 
 | Parameter | Description |
 |-----------|-------------|
-| `-Check` | Checks Paint and Paint 3D installation status, including vulnerability detection. |
-| `-Update` | ⚠️ Checks for updates to existing installations. Note: Paint 3D discontinued Nov 4, 2024. No new installations possible. |
-| `-Uninstall` | Uninstalls Paint 3D using winget and Appx package removal. Requires admin rights. |
-| `-AllUsers` | Applies operations to all users. **Note:** Requires admin rights for Paint 3D detection with `-Check`. Paint detection works without admin. |
-| `-SafePaint3DVersion` | Baseline version for vulnerability checking (default: 6.2305.16087.0). |
+| `-Check` | Displays inventory for Microsoft Paint, Paint 3D, and 3D Viewer using WMI, Appx, and provisioned-package views. |
+| `-Uninstall` | Removes the selected app and version. Requires admin rights. |
+| `-AllUsers` | Uses all-user inventory/removal where supported. During uninstall, also removes matching provisioned packages unless `-SkipProvisionedRemoval` is used. |
+| `-TargetApp` | Optional non-interactive target. Valid values: `Paint`, `Paint3D`, `3DViewer`. |
+| `-TargetVersion` | Optional non-interactive target version. Use an exact installed version such as `11.2601.401.0`, or `ALL`. |
+| `-SkipProvisionedRemoval` | Skips `Remove-AppxProvisionedPackage` during `-Uninstall -AllUsers`. |
+| `-WhatIf` | Shows what would be removed without making changes. |
 
-### Examples
+---
+
+## Examples
 
 ```powershell
-# Check current installation status (includes Classic Paint + Paint 3D vulnerability detection)
+# Check inventory for the current user
 .\Set-Paint3d.ps1 -Check
 
-# Check installation status for all users
+# Check inventory across all users
 .\Set-Paint3d.ps1 -Check -AllUsers
 
-# Check with custom safe version baseline for vulnerability detection
-.\Set-Paint3d.ps1 -Check -SafePaint3DVersion "6.2305.16087.0"
-
-# Check for updates to existing Paint 3D installation
-# Note: Paint 3D discontinued Nov 4, 2024. This will inform you if Paint 3D
-# is not installed or check for updates if it's already installed.
-.\Set-Paint3d.ps1 -Update
-
-# Uninstall Paint 3D for current user
+# Interactive uninstall for the current system scope
 .\Set-Paint3d.ps1 -Uninstall
 
-# Uninstall Paint 3D for all users
+# Interactive uninstall for all users
 .\Set-Paint3d.ps1 -Uninstall -AllUsers
 
-# Preview uninstall without making changes
-.\Set-Paint3d.ps1 -Uninstall -AllUsers -WhatIf
+# Remove all removable versions of Microsoft Paint for all users
+.\Set-Paint3d.ps1 -Uninstall -AllUsers -TargetApp Paint -TargetVersion ALL
+
+# Remove a specific Paint 3D version for all users
+.\Set-Paint3d.ps1 -Uninstall -AllUsers -TargetApp Paint3D -TargetVersion "6.2305.16087.0"
+
+# Preview removal of all 3D Viewer versions for all users
+.\Set-Paint3d.ps1 -Uninstall -AllUsers -TargetApp 3DViewer -TargetVersion ALL -WhatIf
+
+# Remove installed packages for all users but keep provisioned packages
+.\Set-Paint3d.ps1 -Uninstall -AllUsers -TargetApp Paint -TargetVersion ALL -SkipProvisionedRemoval
 ```
 
-### Example Output
+---
 
-**Check Operation (Modern Paint as Store App):**
+## Example Output
+
+### Check operation
+
+```text
+[2026-04-10 14:09:25] [Info] === Microsoft Paint-family App Manager ===
+[2026-04-10 14:09:25] [Info] Scope: Current user
+
+[2026-04-10 14:09:25] [Info] === Microsoft Paint ===
+[2026-04-10 14:09:25] [Info] Detected versions: 11.2601.401.0
+[2026-04-10 14:09:25] [Info] Scanner view (Win32_InstalledStoreProgram):
+[2026-04-10 14:09:25] [Info]   - Name='Microsoft.Paint'; ProgramId='Microsoft.Paint_11.2601.401.0_x64__8wekyb3d8bbwe'; Version='11.2601.401.0'
+[2026-04-10 14:09:25] [Info] Installed MAIN packages:
+[2026-04-10 14:09:25] [Info]   - Microsoft.Paint_11.2601.401.0_x64__8wekyb3d8bbwe
+[2026-04-10 14:09:25] [Info] Installed BUNDLE packages:
+[2026-04-10 14:09:25] [Info]   - None
+[2026-04-10 14:09:25] [Info] Provisioned packages:
+[2026-04-10 14:09:25] [Info]   - Microsoft.Paint_11.2601.401.0_neutral_~_8wekyb3d8bbwe
+[2026-04-10 14:09:25] [Info] Removable versions in this mode: 11.2601.401.0
+
+[2026-04-10 14:09:25] [Info] === Paint 3D ===
+[2026-04-10 14:09:25] [Info] Detected versions: none
+[2026-04-10 14:09:25] [Info] Scanner view (Win32_InstalledStoreProgram):
+[2026-04-10 14:09:25] [Info]   - Not detected
+[2026-04-10 14:09:25] [Info] Installed MAIN packages:
+[2026-04-10 14:09:25] [Info]   - None
+[2026-04-10 14:09:25] [Info] Installed BUNDLE packages:
+[2026-04-10 14:09:25] [Info]   - None
+[2026-04-10 14:09:25] [Info] Provisioned packages:
+[2026-04-10 14:09:25] [Info]   - None
+[2026-04-10 14:09:25] [Info] Removable versions in this mode: none
 ```
-=== Detecting Paint Applications ===
-Safe Paint 3D baseline version: 6.2305.16087.0
 
-Classic Paint / Paint:
-  Installed : Yes
-  Type      : Store App: Microsoft.Paint_11.2509.441.0_x64__8wekyb3d8bbwe
-  Version   : 11.2509.441.0
+### Interactive uninstall
 
-Paint 3D:
-  Installed : No
+```text
+[2026-04-10 14:30:00] [Info] === Microsoft Paint-family App Manager ===
+[2026-04-10 14:30:00] [Info] Scope: All users
 
-=== Summary ===
-ClassicPaintInstalled : True
-ClassicPaintVersion   : 11.2509.441.0
-Paint3DInstalled      : False
-Paint3DVersion        : N/A
-Paint3DVulnerable     : False
-```
+Select the Paint-family app to remove:
+[1] Microsoft Paint  (versions: 11.2601.401.0)
+[2] Paint 3D         (versions: 6.2305.16087.0)
 
-**Check Operation (With Vulnerable Paint 3D):**
-```
-=== Detecting Paint Applications ===
-Safe Paint 3D baseline version: 6.2305.16087.0
+Enter a number from 1 to 2: 1
 
-Classic Paint / Paint:
-  Installed : Yes
-  Path      : C:\Windows\System32\mspaint.exe
-  Version   : 10.0.26100.1
+Removable versions for Microsoft Paint:
+[1] 11.2601.401.0
+[A] ALL versions
 
-Paint 3D:
-  Installed          : Yes
-  Highest Appx Ver.  : 6.2009.30067.0
-  PackageFullName    : Microsoft.MSPaint_6.2009.30067.0_x64__8wekyb3d8bbwe
-  Vulnerable         : YES (below safe version 6.2305.16087.0)
+Enter the version of Microsoft Paint you want to remove (number, exact version, or A): A
 
-=== Summary ===
-ClassicPaintInstalled : True
-ClassicPaintVersion   : 10.0.26100.1
-Paint3DInstalled      : True
-Paint3DVersion        : 6.2009.30067.0
-Paint3DVulnerable     : True
+[2026-04-10 14:30:12] [Info] Selected app                 : Microsoft Paint
+[2026-04-10 14:30:12] [Info] Selected version             : ALL
+[2026-04-10 14:30:12] [Info] Remove provisioned packages  : Yes
+[2026-04-10 14:30:13] [Info] Removed installed MAIN package for all users: Microsoft.Paint_11.2601.401.0_x64__8wekyb3d8bbwe
+[2026-04-10 14:30:15] [Info] Removed provisioned package: Microsoft.Paint_11.2601.401.0_neutral_~_8wekyb3d8bbwe
 ```
 
 ---
 
 ## Technical Details
 
-### Application Identifiers
+### Managed application identifiers
 
-**Paint (Modern/Classic):**
-- **Appx Package Name** (Windows 11+): `Microsoft.Paint`
-- **Legacy Path** (Windows 10): `C:\Windows\System32\mspaint.exe`
-- **Store App Path**: `%LOCALAPPDATA%\Microsoft\WindowsApps\mspaint.exe`
+| App | Store package name | Notes |
+|-----|---------------------|-------|
+| Microsoft Paint | `Microsoft.Paint` | Modern Store app. The script does **not** remove classic `mspaint.exe` as a Windows component. |
+| Paint 3D | `Microsoft.MSPaint` | Deprecated and removed from the Microsoft Store on November 4, 2024. |
+| 3D Viewer | `Microsoft.Microsoft3DViewer` | Deprecated in February 2026 and scheduled for Store removal on July 1, 2026. |
 
-**Paint 3D:**
-- **Appx Package Name**: `Microsoft.MSPaint`
-- **Store ID**: `9NBLGGH5FV99` (discontinued as of Nov 4, 2024)
+### Discovery and removal methods
 
-### Registry and Package Locations
+The script combines three different views:
 
-Paint applications are managed through:
-- **Modern Paint**: Appx/MSIX package (Microsoft.Paint) via Microsoft Store
-- **Paint 3D**: Appx/MSIX package (Microsoft.MSPaint) - discontinued
-- Windows Package Manager (winget) for installation/updates
-- Windows Appx cmdlets for package enumeration and removal
+1. **Scanner view**  
+   `Get-CimInstance Win32_InstalledStoreProgram`
 
-### Administrator Rights Requirements
+2. **Installed package view**  
+   `Get-AppxPackage` using:
+   - `-PackageTypeFilter Main`
+   - `-PackageTypeFilter Bundle` (primarily for `-AllUsers` removal)
 
-| Operation | Admin Required | Notes |
-|-----------|----------------|-------|
-| `-Check` (current user) | ❌ No | Full detection works for both Paint and Paint 3D |
-| `-Check -AllUsers` | ⚠️ Partial | Paint detection works; Paint 3D needs admin (falls back to current user) |
-| `-Update` | ✅ Yes | Required for winget operations |
-| `-Uninstall` | ✅ Yes | Required for package removal |
+3. **Provisioned package view**  
+   `Get-AppxProvisionedPackage -Online`
+
+### Why bundle-first removal matters
+
+When `Remove-AppxPackage -AllUsers` is used, removal works from the **parent package type**. If the app is installed as a bundle, the bundle should be targeted first. The script follows that pattern automatically in `-AllUsers` mode.
 
 ---
 
-## Output Example
+## Administrator Rights Requirements
 
-### Check Operation
-
-```
-[2025-11-26 10:30:15] [Info] === Paint 3D Management Script ===
-[2025-11-26 10:30:15] [Info] Scope: Current user
-[2025-11-26 10:30:15] [Info] 
-[2025-11-26 10:30:15] [Info] Queued: Check current status.
-[2025-11-26 10:30:15] [Info] Executing requested operations...
-[2025-11-26 10:30:15] [Info] 
-[2025-11-26 10:30:15] [Info] Paint 3D is installed. Current installation(s):
-[2025-11-26 10:30:15] [Info]   Package: Microsoft.MSPaint_6.1905.29027.0_x64__8wekyb3d8bbwe
-[2025-11-26 10:30:15] [Info]   Version: 6.1905.29027.0
-[2025-11-26 10:30:15] [Info] 
-[2025-11-26 10:30:15] [Info] Finished.
-```
-
-### Update Operation
-
-```
-[2025-11-26 10:32:45] [Info] === Paint 3D Management Script ===
-[2025-11-26 10:32:45] [Info] Scope: Current user
-[2025-11-26 10:32:45] [Info] 
-[2025-11-26 10:32:45] [Info] Queued: Update Paint 3D.
-[2025-11-26 10:32:45] [Info] Executing requested operations...
-[2025-11-26 10:32:45] [Info] 
-[2025-11-26 10:32:45] [Info] Attempting to upgrade Paint 3D with winget...
-[2025-11-26 10:32:52] [Info] Paint 3D upgraded successfully.
-[2025-11-26 10:32:52] [Info] 
-[2025-11-26 10:32:52] [Info] Changes applied successfully.
-[2025-11-26 10:32:52] [Info] 
-[2025-11-26 10:32:52] [Info] === Post-action state ===
-[2025-11-26 10:32:52] [Info] Paint 3D is installed. Current installation(s):
-[2025-11-26 10:32:52] [Info]   Package: Microsoft.MSPaint_6.2103.30017.0_x64__8wekyb3d8bbwe
-[2025-11-26 10:32:52] [Info]   Version: 6.2103.30017.0
-[2025-11-26 10:32:52] [Info] 
-[2025-11-26 10:32:52] [Info] Finished.
-```
-
-### Uninstall Operation
-
-```
-[2025-11-26 10:35:20] [Info] === Paint 3D Management Script ===
-[2025-11-26 10:35:20] [Info] Scope: All users
-[2025-11-26 10:35:20] [Info] 
-[2025-11-26 10:35:20] [Info] Queued: Uninstall Paint 3D.
-[2025-11-26 10:35:20] [Info] Executing requested operations...
-[2025-11-26 10:35:20] [Info] 
-[2025-11-26 10:35:20] [Info] Attempting to uninstall Paint 3D via winget...
-[2025-11-26 10:35:25] [Info] Paint 3D uninstalled via winget.
-[2025-11-26 10:35:25] [Info] Removing Appx package(s) Microsoft.MSPaint...
-[2025-11-26 10:35:26] [Info] Removed package for all users: Microsoft.MSPaint_6.2103.30017.0_x64__8wekyb3d8bbwe
-[2025-11-26 10:35:26] [Info] 
-[2025-11-26 10:35:26] [Info] Changes applied successfully.
-[2025-11-26 10:35:26] [Info] 
-[2025-11-26 10:35:26] [Info] === Post-action state ===
-[2025-11-26 10:35:26] [Info] Paint 3D (Microsoft.MSPaint) is NOT installed.
-[2025-11-26 10:35:26] [Info] 
-[2025-11-26 10:35:26] [Info] Finished.
-```
+| Operation | Admin required | Notes |
+|-----------|----------------|-------|
+| `-Check` | No | Current-user inventory works without elevation. |
+| `-Check -AllUsers` | Recommended | Complete all-user Appx inventory requires elevation. Without admin rights, results may be partial. |
+| `-Uninstall` | Yes | The script requires an elevated PowerShell session for all uninstall operations. |
+| `-Uninstall -AllUsers` | Yes | Required for all-user removal and provisioned-package cleanup. |
 
 ---
 
 ## Requirements
 
-* **Windows 10/11**
-* **PowerShell 5.1 or later**
-* **Administrative privileges** (for Update and Uninstall operations)
-* **Windows Package Manager (winget)** (recommended for Update operations)
+- **Windows 10/11**
+- **PowerShell 5.1 or later**
+- **Administrative privileges** for `-Uninstall`
+- Appx/DISM cmdlets available in the local Windows image
 
 ---
 
-## Testing
+## Verification Commands
 
-The script includes comprehensive Pester tests in `Set-Paint3d.Tests.ps1`.
+Use these commands to verify what remains after uninstall.
 
-To run the tests:
+### Microsoft Paint
 
 ```powershell
-# Install Pester if not already installed
-Install-Module -Name Pester -Force -SkipPublisherCheck
+Get-AppxPackage -AllUsers -PackageTypeFilter Main,Bundle -Name Microsoft.Paint |
+    Format-List PackageFullName, PackageUserInformation
 
-# Run tests
-Invoke-Pester -Path .\Set-Paint3d.Tests.ps1
+Get-AppxProvisionedPackage -Online |
+    Where-Object DisplayName -eq 'Microsoft.Paint' |
+    Select-Object DisplayName, Version, PackageName
+
+Get-CimInstance Win32_InstalledStoreProgram |
+    Where-Object { $_.ProgramId -like 'Microsoft.Paint*' } |
+    Select-Object Name, ProgramId, Version
+```
+
+### Paint 3D
+
+```powershell
+Get-AppxPackage -AllUsers -PackageTypeFilter Main,Bundle -Name Microsoft.MSPaint |
+    Format-List PackageFullName, PackageUserInformation
+
+Get-AppxProvisionedPackage -Online |
+    Where-Object DisplayName -eq 'Microsoft.MSPaint' |
+    Select-Object DisplayName, Version, PackageName
+
+Get-CimInstance Win32_InstalledStoreProgram |
+    Where-Object { $_.ProgramId -like 'Microsoft.MSPaint*' } |
+    Select-Object Name, ProgramId, Version
+```
+
+### 3D Viewer
+
+```powershell
+Get-AppxPackage -AllUsers -PackageTypeFilter Main,Bundle -Name Microsoft.Microsoft3DViewer |
+    Format-List PackageFullName, PackageUserInformation
+
+Get-AppxProvisionedPackage -Online |
+    Where-Object DisplayName -eq 'Microsoft.Microsoft3DViewer' |
+    Select-Object DisplayName, Version, PackageName
+
+Get-CimInstance Win32_InstalledStoreProgram |
+    Where-Object { $_.ProgramId -like 'Microsoft.Microsoft3DViewer*' } |
+    Select-Object Name, ProgramId, Version
 ```
 
 ---
 
 ## Troubleshooting
 
-### Execution Policy Error
+### `-Uninstall` says "No removable packages were found"
 
-If you receive an error about execution policy:
+This usually means one of these is true:
+
+- The package is already removed for the **current user**
+- The package still exists for **another user profile**
+- Only the **provisioned package** remains in the Windows image
+
+Try:
+
+```powershell
+.\Set-Paint3d.ps1 -Check -AllUsers
+```
+
+Then, if appropriate:
+
+```powershell
+.\Set-Paint3d.ps1 -Uninstall -AllUsers
+```
+
+### WMI/scanner view still shows the app after current-user removal
+
+`Win32_InstalledStoreProgram` can still show the app when:
+
+- another user profile still has it installed, or
+- inventory has not refreshed yet
+
+Use `-Check -AllUsers` and the verification commands above to confirm whether the package still exists in another profile.
+
+### Provisioned package still appears after uninstall
+
+Current-user uninstall does **not** remove provisioned packages. To remove the app from the online image so it is not provisioned for future users, run:
+
+```powershell
+.\Set-Paint3d.ps1 -Uninstall -AllUsers
+```
+
+If you intentionally want to keep provisioned packages, use `-SkipProvisionedRemoval`.
+
+### Exact version is rejected
+
+`-TargetVersion` must match one of the **removable versions** shown by the script for the selected scope. Use `-Check` first if you are unsure.
+
+### Execution policy error
+
+If PowerShell blocks the script, run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-### winget Not Available
+### Classic `mspaint.exe` is still present
 
-If winget is not available:
-- For Windows 10: Install [App Installer](https://www.microsoft.com/p/app-installer/9nblggh4nns1) from Microsoft Store
-- For Windows 11: winget is pre-installed; ensure Windows is up to date
+That is expected. The script manages **Store app packages** only. It does **not** remove the legacy Windows component at:
 
-### Administrative Privileges
-
-Update and Uninstall operations require administrative privileges. Right-click PowerShell and select "Run as Administrator".
-
-### Paint 3D Already Removed
-
-If Paint 3D has been removed via Windows Settings or Group Policy:
-- The script will detect no installed packages
-- No errors will be thrown
-- The script will report "NOT installed"
+```text
+C:\Windows\System32\mspaint.exe
+```
 
 ---
 
 ## Notes
 
-- **Check** operations do not require administrative privileges
-- **Update** and **Uninstall** operations require administrative privileges
-- The script uses command pattern design for extensibility
-- Supports PowerShell's `-WhatIf` parameter for safe testing
-- Works with both current user and all users scenarios
+- The script now focuses on **inventory and removal**, not install/update workflows
+- `-Check` is a discovery action only; it does **not** apply a safe-version baseline or vulnerability score
+- The script is designed for cases where the remediation action is **remove the app**
+- `-WhatIf` is supported for uninstall preview
+- The script name remains `Set-Paint3d` even though the scope is broader
 
 ---
 
 ## Security Considerations
 
-This script manages application installation and removal, which can affect system security posture:
+This script changes application state and can affect the software inventory seen by users, administrators, and vulnerability scanners.
 
-- Always review the script before running in production environments
-- Test in non-production environments first
-- Verify that Paint 3D removal aligns with organisational policies
-- Consider Group Policy management for enterprise deployments
-- Monitor Windows Event Logs for package installation/removal events
+Before using it in production:
+
+- Review the script contents
+- Validate app removal against organisational policy
+- Test on a non-production system first
+- Confirm post-removal state with both Appx commands and `Win32_InstalledStoreProgram`
+- Document whether you want to remove only installed packages or also provisioned packages
 
 ---
 
 ## Related CIS Controls
 
-This script supports application management practices aligned with:
+This script supports software inventory and application control practices aligned with:
 
-* **CIS Control 2: Inventory and Control of Software Assets**
-  * 2.3: Utilize software inventory tools
-  * 2.4: Track and report unauthorised software
+- **CIS Control 2: Inventory and Control of Software Assets**
+  - 2.3: Utilize software inventory tools
+  - 2.4: Track and report unauthorized software
 
-* **CIS Control 4: Secure Configuration of Enterprise Assets and Software**
-  * 4.1: Establish and maintain a secure configuration process
-  * 4.7: Manage default accounts on enterprise assets and software
+- **CIS Control 4: Secure Configuration of Enterprise Assets and Software**
+  - 4.1: Establish and maintain a secure configuration process
 
 ---
 
 ## License
 
 This script is provided **as-is** without warranty.  
-Use at your own risk and verify in a non-production environment before deployment.
+Use it at your own risk and validate in a non-production environment before deployment.
 
 ---
 
 ## Version History
 
-- **1.0.0** (2025-11-26) - Initial release
-  - Check installation status
-  - Update/install via winget
-  - Uninstall with AllUsers support
-  - Command pattern implementation
-  - Comprehensive Pester tests
+- **2.0.0** (2026-04-10)
+  - Expanded scope from Paint 3D only to Microsoft Paint, Paint 3D, and 3D Viewer
+  - Removed legacy update/install workflow documentation
+  - Added scanner-aligned `Win32_InstalledStoreProgram` inventory
+  - Added interactive app and version prompts for uninstall
+  - Added all-user removal guidance for MAIN, BUNDLE, and provisioned packages
+  - Retained the `Set-Paint3d` project name for compatibility
+
+- **1.0.0**
+  - Original Paint 3D-only workflow
