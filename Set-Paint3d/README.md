@@ -29,40 +29,40 @@ This makes it useful for remediation workflows where a scanner or internal polic
 
 ```mermaid
 flowchart TD
-    Start([Script Starts]) --> Validate{Action specified?}
-    Validate -->|No| Error1[Throw error: Use -Check or -Uninstall]
-    Validate -->|Yes| Conflict{Both -Check and -Uninstall?}
-    Conflict -->|Yes| Error2[Throw error]
-    Conflict -->|No| Action{Selected action}
+    Start(["Script starts"]) --> Validate{"Action specified?"}
+    Validate -->|No| Error1["Throw error: use -Check or -Uninstall"]
+    Validate -->|Yes| Conflict{"Both -Check and -Uninstall?"}
+    Conflict -->|Yes| Error2["Throw error"]
+    Conflict -->|No| Action{"Selected action"}
 
-    Action -->|Check| CheckScope[Determine scope: current user or all users]
-    CheckScope --> CollectWMI[Query Win32_InstalledStoreProgram]
-    CollectWMI --> CollectAppx[Query Appx packages]
-    CollectAppx --> CollectProvisioned[Query provisioned packages]
-    CollectProvisioned --> ShowInventory[Display inventory for Paint, Paint 3D, and 3D Viewer]
-    ShowInventory --> End1([Exit])
+    Action -->|Check| CheckScope["Determine scope: current user or all users"]
+    CheckScope --> CollectWMI["Query Win32_InstalledStoreProgram"]
+    CollectWMI --> CollectAppx["Query Appx packages"]
+    CollectAppx --> CollectProvisioned["Query provisioned packages"]
+    CollectProvisioned --> ShowInventory["Display inventory for Paint, Paint 3D, and 3D Viewer"]
+    ShowInventory --> End1(["Exit"])
 
-    Action -->|Uninstall| Admin{Elevated PowerShell?}
-    Admin -->|No| Error3[Throw error: admin required]
-    Admin -->|Yes| ResolveApp{Target app supplied?}
-    ResolveApp -->|No| PromptApp[Prompt user to choose app]
-    ResolveApp -->|Yes| ResolveVersions
-    PromptApp --> ResolveVersions[Build removable version list]
-    ResolveVersions --> PromptVersion{Target version supplied?}
-    PromptVersion -->|No| AskVersion[Prompt user for exact version or ALL]
-    PromptVersion -->|Yes| RemoveMode
-    AskVersion --> RemoveMode{AllUsers?}
+    Action -->|Uninstall| Admin{"Elevated PowerShell?"}
+    Admin -->|No| Error3["Throw error: admin required"]
+    Admin -->|Yes| ResolveApp{"Target app supplied?"}
+    ResolveApp -->|No| PromptApp["Prompt user to choose app"]
+    ResolveApp -->|Yes| ResolveVersions["Build removable version list"]
+    PromptApp --> ResolveVersions
+    ResolveVersions --> PromptVersion{"Target version supplied?"}
+    PromptVersion -->|No| AskVersion["Prompt user for exact version or ALL"]
+    PromptVersion -->|Yes| RemoveMode{"AllUsers?"}
+    AskVersion --> RemoveMode
 
-    RemoveMode -->|No| RemoveMain[Remove MAIN package(s) for current user]
-    RemoveMode -->|Yes| RemoveBundle[Remove BUNDLE package(s) for all users first]
-    RemoveBundle --> RemoveMainFallback[If no bundle, remove MAIN package(s) for all users]
-    RemoveMain --> ProvisionedCheck
-    RemoveMainFallback --> ProvisionedCheck{Skip provisioned removal?}
-    ProvisionedCheck -->|No| RemoveProvisioned[Remove matching provisioned package(s)]
-    ProvisionedCheck -->|Yes| PostCheck[Run post-removal inventory]
+    RemoveMode -->|No| RemoveMain["Remove MAIN packages for current user"]
+    RemoveMode -->|Yes| RemoveBundle["Remove BUNDLE packages for all users first"]
+    RemoveBundle --> RemoveMainFallback["If no bundle, remove MAIN packages for all users"]
+    RemoveMain --> ProvisionedCheck{"Skip provisioned removal?"}
+    RemoveMainFallback --> ProvisionedCheck
+    ProvisionedCheck -->|No| RemoveProvisioned["Remove matching provisioned packages"]
+    ProvisionedCheck -->|Yes| PostCheck["Run post-removal inventory"]
     RemoveProvisioned --> PostCheck
-    PostCheck --> ShowPost[Display post-removal state]
-    ShowPost --> End2([Exit])
+    PostCheck --> ShowPost["Display post-removal state"]
+    ShowPost --> End2(["Exit"])
 ```
 
 ---
